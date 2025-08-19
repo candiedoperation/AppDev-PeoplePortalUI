@@ -1,0 +1,1 @@
+export const PEOPLEPORTAL_SERVER_ENDPOINT = "http://localhost:3000"

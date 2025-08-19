@@ -17,56 +17,122 @@
 */
 
 import { AppSidebar } from "@/components/app-sidebar"
+import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
+import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
+    Breadcrumb,
+    BreadcrumbItem,
+    BreadcrumbLink,
+    BreadcrumbList,
+    BreadcrumbPage,
+    BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
 import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
+    SidebarInset,
+    SidebarProvider,
+    SidebarTrigger,
 } from "@/components/ui/sidebar"
+import React from "react"
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
+
+const translateBreadcrumbPath = (path: string) => {
+    switch (path) {
+        case "org":
+            return "Organization"
+
+        case "teams":
+            return "Teams"
+
+        case "people":
+            return "People"
+
+        default:
+            return "Unknown Path"
+    }
+}
+
+interface BreadcrumbItem {
+    name: string,
+    path: string
+}
 
 export const CorpDashboard = () => {
-  return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "19rem",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar />
-      <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-2 data-[orientation=vertical]:h-4"
-          />
-          <Breadcrumb>
-            <BreadcrumbList>
-              <BreadcrumbItem className="hidden md:block">
-                <BreadcrumbLink href="#">
-                  Building Your Application
-                </BreadcrumbLink>
-              </BreadcrumbItem>
-              <BreadcrumbSeparator className="hidden md:block" />
-              <BreadcrumbItem>
-                <BreadcrumbPage>Data Fetching</BreadcrumbPage>
-              </BreadcrumbItem>
-            </BreadcrumbList>
-          </Breadcrumb>
-        </header>
-        <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
-          
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
-  )
+    const location = useLocation()
+    const navigate = useNavigate()
+    const [breadcrumbs, setBreadcrumbs] = React.useState<BreadcrumbItem[]>([]);
+
+    React.useEffect(() => {
+        const path = location.pathname;
+        const pathArr = path.split("/").filter(Boolean)
+        const breadcrumbsList = pathArr.reduce((prev: BreadcrumbItem[], path: string) => {
+            const crumbName = translateBreadcrumbPath(path)
+            const accumulatedPath = (prev.length < 1) ? `/${path}` :
+                `${prev[prev.length - 1].path}/${path}`
+
+            /* Append to Accumulator */
+            prev.push({
+                name: crumbName,
+                path: accumulatedPath
+            })
+
+            /* Return the Accumulator */
+            return prev
+        }, [])
+
+        /* Update Crumbs */
+        setBreadcrumbs(() => breadcrumbsList)
+    }, [location]);
+
+    return (
+        <SidebarProvider
+            style={
+                {
+                    "--sidebar-width": "19rem",
+                } as React.CSSProperties
+            }
+        >
+            <AppSidebar />
+            <SidebarInset>
+                <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+                    <SidebarTrigger className="-ml-1" />
+                    <Separator
+                        orientation="vertical"
+                        className="mr-2 data-[orientation=vertical]:h-4"
+                    />
+                    <Breadcrumb>
+                        <BreadcrumbList>
+                            {
+                                breadcrumbs.map((crumb, index) => (
+                                    <>
+                                        <BreadcrumbItem className="hidden md:block">
+                                            {
+                                                index < breadcrumbs.length - 1 ?
+                                                    <BreadcrumbLink
+                                                        onClick={() => { navigate(crumb.path) }}
+                                                        style={{ cursor: "pointer" }}
+                                                    >
+                                                        {crumb.name}
+                                                    </BreadcrumbLink> :
+                                                    <BreadcrumbPage>{crumb.name}</BreadcrumbPage>
+                                            }
+                                        </BreadcrumbItem>
+                                        {index < breadcrumbs.length - 1 ? <BreadcrumbSeparator className="hidden md:block" /> : <></>}
+                                    </>
+                                ))
+                            }
+                        </BreadcrumbList>
+                    </Breadcrumb>
+                </header>
+                <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                    <Routes>
+                        <Route path="/" element={<Navigate to="/org/people" />} />
+                        <Route path="/org" element={<Navigate to="/org/people" />} />
+                        <Route path="/org/people" element={<DashboardPeopleList />} />
+                        <Route path="/org/teams" element={<DashboardTeamsList />} />
+                    </Routes>
+                </div>
+            </SidebarInset>
+        </SidebarProvider>
+    )
 }

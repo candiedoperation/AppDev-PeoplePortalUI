@@ -1,5 +1,5 @@
 /**
-  App Dev Club People Portal Server
+  App Dev Club People Portal UI
   Copyright (C) 2025  Atheesh Thirumalairajan
 
   This program is free software: you can redistribute it and/or modify

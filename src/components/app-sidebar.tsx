@@ -33,11 +33,10 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { SidebarUserInfo } from "./fabric/SidebarUserInfo"
-import { Link } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 
 interface SideBarMenuItemData {
   title: string,
-  isActive?: boolean,
   url?: string,
   items?: SideBarMenuItemData[]
 }
@@ -83,13 +82,15 @@ const data: SideBarMenuItemData[] = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const location = useLocation()
+  
   return (
     <Sidebar variant="floating" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <a href="/">
+              <a style={{ cursor: 'pointer' }}>
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
                   <img src={logo} />
                 </div>
@@ -118,7 +119,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <SidebarMenuSub className="ml-0 border-l-0 px-1.5">
                     {item.items.map((item) => (
                       <SidebarMenuSubItem key={item.title}>
-                        <SidebarMenuSubButton asChild isActive={item.isActive}>
+                        <SidebarMenuSubButton asChild isActive={(item.url != undefined && location.pathname.includes(item.url))}>
                           <Link to={item.url ?? "#"}>{item.title}</Link>
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>

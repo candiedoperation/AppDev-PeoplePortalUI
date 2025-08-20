@@ -75,7 +75,7 @@ const data: SideBarMenuItemData[] = [
       items: [
         {
           title: "Events",
-          url: "/events/list",
+          url: "/community/events",
         },
       ],
     },
@@ -132,7 +132,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarUserInfo user={{ name: "Atheesh", email: "atheesh@atheesh.org", avatar: "AT" }} />
+        <SidebarUserInfo user={{ name: "Atheesh Th", email: "atheesh@atheesh.org", avatar: "A" }} />
       </SidebarFooter>
     </Sidebar>
   )

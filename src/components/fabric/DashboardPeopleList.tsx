@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { Pagination, PaginationContent, PaginationItem, PaginationPrevious, PaginationLink, PaginationEllipsis, PaginationNext } from "../ui/pagination";
+import { User2Icon } from "lucide-react";
 
 export interface PaginationDefinition {
 
@@ -19,6 +20,7 @@ export interface GetUserListResponse {
 }
 
 export interface UserInformationBrief {
+    pk: string,
     username: string,
     email: string,
     name: string,
@@ -129,7 +131,7 @@ export const DashboardPeopleList = () => {
                                 <TableRow
                                     key={row.id}
                                     data-state={row.getIsSelected() && "selected"}
-                                    onClick={() => { navigate(`/org/people/${row.getValue("username")}`) }}
+                                    onClick={() => { navigate(`/org/people/${row.original.pk}`) }}
                                     style={{ cursor: 'pointer' }}
                                 >
                                     {row.getVisibleCells().map((cell) => {
@@ -148,9 +150,9 @@ export const DashboardPeopleList = () => {
                                                                 const lastName = nameArray.slice(1)
 
                                                                 return (<div className="flex items-center">
-                                                                    <Avatar>
-                                                                        <AvatarImage src="https://github.com/shadcn.png" alt="@shadcn" />
-                                                                        <AvatarFallback>{firstName[0].charAt(0).toUpperCase()}</AvatarFallback>
+                                                                    <Avatar className="h-8 w-8 rounded-lg">
+                                                                        <AvatarImage src="https://githuwb.com/shadcn.png" alt="@shadcn" />
+                                                                        <AvatarFallback className="rounded-lg"><User2Icon size="16" /></AvatarFallback>
                                                                     </Avatar>
                                                                     <div className="flex flex-col ml-2">
                                                                         <span>{firstName}</span>

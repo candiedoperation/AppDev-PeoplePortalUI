@@ -47,8 +47,14 @@ const translateBreadcrumbPath = (path: string) => {
         case "people":
             return "People"
 
+        case "community":
+            return "Community"
+
+        case "events":
+            return "Events"
+
         default:
-            return "Unknown Path"
+            return path
     }
 }
 

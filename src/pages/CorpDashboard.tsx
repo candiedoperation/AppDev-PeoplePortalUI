@@ -18,6 +18,7 @@
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
+import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
 import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import {
     Breadcrumb,
@@ -136,6 +137,7 @@ export const CorpDashboard = () => {
                         <Route path="/org" element={<Navigate to="/org/people" />} />
                         <Route path="/org/people" element={<DashboardPeopleList />} />
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
+                        <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                     </Routes>
                 </div>
             </SidebarInset>

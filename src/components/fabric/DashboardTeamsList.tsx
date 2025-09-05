@@ -15,6 +15,7 @@ import { ORGANIZATION_NAME } from "@/commons/strings";
 import { Tooltip } from "../ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from "../ui/select";
+import { Checkbox } from "../ui/checkbox";
 
 export interface PaginationDefinition {
 
@@ -186,6 +187,7 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const [teamSeason, setTeamSeason] = React.useState<string>()
     const [teamType, setTeamType] = React.useState("");
     const [teamYear] = React.useState<number>(new Date().getFullYear())
+    const [projectLeadConfirmed, setProjectLeadConfirmed] = React.useState(false)
 
     const handleFormSubmit = () => {
         fetch(submitURL, {
@@ -241,6 +243,11 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                                     </SelectGroup>
                                 </SelectContent>
                             </Select>
+
+                            <div className={`flex items-center gap-3 ${(teamType == "PROJECT") ? "" : "hidden"}`}>
+                                <Checkbox checked={projectLeadConfirmed} onCheckedChange={(checked) => setProjectLeadConfirmed(checked != false)} id="projectlead_confirm" />
+                                <Label htmlFor="projectlead_confirm">I confirm that I will be the Project Lead for this team</Label>
+                            </div>
                         </div>
                         <div className="grid gap-3">
                             <Label htmlFor="username-1">Team Season</Label>
@@ -274,7 +281,7 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                         </DialogClose>
                         <Button 
                             onClick={handleFormSubmit} 
-                            disabled={(teamName.trim().length < 3) || !teamSeason || !teamType}
+                            disabled={(teamName.trim().length < 3) || !teamSeason || !teamType || (teamType == "PROJECT" ? !projectLeadConfirmed : false)}
                         >
                             Create Team
                         </Button>

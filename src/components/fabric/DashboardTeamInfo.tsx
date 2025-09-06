@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, SearchIcon, User2Icon, UserPlus2Icon } from "lucide-react"
+import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, NotebookPenIcon, SearchIcon, User2Icon, UserPlus2Icon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -69,7 +69,18 @@ export const DashboardTeamInfo = () => {
                 </Button>
             </div>
 
+            <div className="mt-2">
+                <h3 className="text-lg">Manage Your Team</h3>
+                <div className="flex gap-2 mt-2">
+                    <Button variant="outline" className="cursor-pointer">
+                        <NotebookPenIcon />
+                        Recruitment
+                    </Button>
+                </div>
+            </div>
+
             <Tabs className="mt-5" defaultValue="owner">
+                <h3 className="text-lg">Who's on my Team?</h3>
                 <TabsList>
                     <TabsTrigger value="owner">Team Owners</TabsTrigger>
                     {
@@ -124,7 +135,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                     : !!inviteEmailAddress.trim()
             ))
     }, [
-        selectedSubTeam, selectedExistingMember, 
+        selectedSubTeam, selectedExistingMember,
         currentTab, roleTitle
     ])
 
@@ -132,18 +143,22 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
         if (!selectedSubTeam || !selectedExistingMember)
             return
 
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${selectedSubTeam.pk}/addmember`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userPk: selectedExistingMember.pk })
-        }).then((_res) => {
-            toast.success(`Added ${selectedExistingMember.name} to your team!`)
-            props.openChanged(false, true)
-        }).catch((err) => {
-            toast.error(`Failed to add ${selectedExistingMember.name} to your team! Error: ${err.message}`)
-            props.openChanged(false)
-        })
+        if (currentTab == "existing") {
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${selectedSubTeam.pk}/addmember`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userPk: selectedExistingMember.pk })
+            }).then((_res) => {
+                toast.success(`Added ${selectedExistingMember.name} to your team!`)
+                props.openChanged(false, true)
+            }).catch((err) => {
+                toast.error(`Failed to add ${selectedExistingMember.name} to your team! Error: ${err.message}`)
+                props.openChanged(false)
+            })
+        } else if (currentTab == "invite") {
+
+        }
     }
 
     return (

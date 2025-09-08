@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, NotebookPenIcon, SearchIcon, User2Icon, UserPlus2Icon } from "lucide-react"
+import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -16,6 +16,8 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from ".
 import { cn } from "@/lib/utils";
 import type { GetUserListResponse } from "./DashboardPeopleList";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
+import { ProgressUpdateDialog } from "../fragments/ProgressUpdateDialog";
 
 interface TeamInfoResponse {
     team: TeamInfo,
@@ -27,6 +29,7 @@ interface TeamInfo {
     name: string,
     users: UserInformationBrief[],
     attributes: {
+        description: any;
         friendlyName: string,
         teamType: string,
         seasonType: string,
@@ -39,6 +42,10 @@ export const DashboardTeamInfo = () => {
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
     const [addMembersOpen, setAddMembersOpen] = React.useState(false);
+
+    const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
+    const [syncDialogProgress, setSyncDialogProgress] = React.useState(0);
+    const [syncDialogStatus, setSyncDialogStatus] = React.useState("");
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
@@ -53,14 +60,50 @@ export const DashboardTeamInfo = () => {
             })
     }, []);
 
+    function syncBindles() {
+        /* Reset State and Open Sync Dialog */
+        setSyncDialogProgress(0)
+        setSyncDialogStatus("Connecting to Server...")
+        setSyncDialogOpen(true)
+        
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/syncbindles`, {
+            method: "PATCH"
+        }).then(async response => {
+            if (!response.body) {
+                console.error("no body")
+                return
+            }
+
+            const reader = response.body.getReader();
+            let decoder = new TextDecoder();
+            
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) 
+                    break;
+                
+                const update = JSON.parse(decoder.decode(value, { stream: true }));
+                setSyncDialogProgress(update.progressPercent)
+                setSyncDialogStatus(update.status)
+            }
+
+            /* Sync Completed */
+            setSyncDialogOpen(false);
+            toast.success(`Shared Permissions Synced for the ${teamInfo?.attributes.friendlyName} team!`)
+        }).catch(e => {
+            toast.error(`Shared Permissions Sync Failure: ${e.message}`)
+        });
+    }
+
     return (
         <div className="flex flex-col m-2">
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
+            <ProgressUpdateDialog open={syncDialogOpen} title="Syncing Shared Permissions" description="Please wait while the permissions propagate across Shared Resources" status={syncDialogStatus} progressPercent={syncDialogProgress} />
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
-                    <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">{teamInfo?.attributes.friendlyName}</h1>
-                    <h4 className="text-xl text-muted-foreground">{`${teamInfo?.attributes.seasonType} ${teamInfo?.attributes.seasonYear}`}</h4>
+                    <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">{teamInfo?.attributes.friendlyName} <span className="text-2xl ml-1 text-muted-foreground">{`${teamInfo?.attributes.seasonType} ${teamInfo?.attributes.seasonYear}`}</span></h1>
+                    <h4 className="text-xl text-muted-foreground">{teamInfo?.attributes.description}</h4>
                 </div>
 
                 <Button className="cursor-pointer" onClick={() => { setAddMembersOpen(true) }}>
@@ -69,12 +112,22 @@ export const DashboardTeamInfo = () => {
                 </Button>
             </div>
 
-            <div className="mt-2">
+            <div className="mt-3">
                 <h3 className="text-lg">Manage Your Team</h3>
                 <div className="flex gap-2 mt-2">
                     <Button variant="outline" className="cursor-pointer">
                         <NotebookPenIcon />
                         Recruitment
+                    </Button>
+
+                    <Button variant="outline" className="cursor-pointer">
+                        <WorkflowIcon />
+                        Manage Subteams
+                    </Button>
+
+                    <Button onClick={syncBindles} variant="outline" className="cursor-pointer">
+                        <RefreshCcwIcon />
+                        Sync Shared Permissions
                     </Button>
                 </div>
             </div>
@@ -124,6 +177,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
     const [isLoading, setIsLoading] = React.useState(false);
     const [isFormComplete, setIsFormComplete] = React.useState(false)
     const [inviteEmailAddress, setInviteEmailAddress] = React.useState("")
+    const [inviteName, setInviteName] = React.useState("")
     const [roleTitle, setRoleTitle] = React.useState("")
 
     React.useEffect(() => {
@@ -132,18 +186,19 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
             (
                 currentTab === "existing"
                     ? !!selectedExistingMember
-                    : !!inviteEmailAddress.trim()
+                    : !!inviteEmailAddress.trim() && !!inviteName.trim()
             ))
     }, [
         selectedSubTeam, selectedExistingMember,
-        currentTab, roleTitle
+        currentTab, roleTitle, inviteEmailAddress, inviteName
     ])
 
     const handleMemberAdd = async () => {
-        if (!selectedSubTeam || !selectedExistingMember)
-            return
-
         if (currentTab == "existing") {
+            if (!selectedSubTeam || !selectedExistingMember)
+                return
+
+            setIsLoading(true)
             fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${selectedSubTeam.pk}/addmember`, {
                 method: "POST",
                 credentials: "include",
@@ -155,9 +210,30 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
             }).catch((err) => {
                 toast.error(`Failed to add ${selectedExistingMember.name} to your team! Error: ${err.message}`)
                 props.openChanged(false)
-            })
+            }).finally(() => { setIsLoading(false) })
         } else if (currentTab == "invite") {
-
+            if (!selectedSubTeam)
+                return
+            
+            setIsLoading(true)
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/new`, {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    inviteName,
+                    inviteEmail: inviteEmailAddress,
+                    roleTitle,
+                    teamPk: selectedSubTeam.pk,
+                    inviterPk: 7 /* Fix this!! */
+                })
+            }).then((_res) => {
+                toast.success(`Invite for ${inviteName} sent to ${inviteEmailAddress}!`)
+                props.openChanged(false, true)
+            }).catch((err) => {
+                toast.error(`Failed to send invite to ${inviteEmailAddress}! Error: ${err.message}`)
+                props.openChanged(false)
+            }).finally(() => { setIsLoading(false) })
         }
     }
 
@@ -184,7 +260,19 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                             </TabsContent>
 
                             <TabsContent className="flex flex-col gap-2" value="invite">
-                                <Label className="mt-2">Candidate Email Address</Label>
+                                <Alert>
+                                    <TriangleAlertIcon />
+                                    <AlertTitle>Recruitment Override Warning</AlertTitle>
+                                    <AlertDescription>
+                                    By directly adding a member, you're bypassing App Dev's standard recruitment procedures. Please use this feature only if
+                                    you are entirely sure that this person would be a great fit for the team and that they would align with App Dev's culture and standards.
+                                    </AlertDescription>
+                                </Alert>
+                                
+                                <Label className="mt-2">Candidate's Name</Label>
+                                <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
+                                
+                                <Label className="mt-2">Candidate's Email Address</Label>
                                 <Input value={inviteEmailAddress} onChange={(e) => setInviteEmailAddress(e.target.value)} placeholder="Ex. atheesh@terpmail.umd.edu" />
                             </TabsContent>
                         </Tabs>
@@ -212,19 +300,8 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                                     <CommandList>
                                         <CommandGroup>
                                             {props.subteams.map((team) => {
-                                                let teamDisplayName = team.name
-                                                let teamDisplayDesc = "Non-standard Group"
-
-                                                const subteamFriendlyName = team.attributes.friendlyName
-                                                if (subteamFriendlyName.endsWith("Engr")) {
-                                                    teamDisplayName = "Engineering Team (UI/UX, PMs, SWEs, etc.)"
-                                                    teamDisplayDesc = team.name
-                                                }
-
-                                                else if (subteamFriendlyName.endsWith("Lead")) {
-                                                    teamDisplayName = "Project Leadership (Project and Tech Leads)"
-                                                    teamDisplayDesc = team.name
-                                                }
+                                                let teamDisplayName = `${team.attributes.friendlyName} (${team.attributes.description})`
+                                                let teamDisplayDesc = team.name
 
                                                 return (
                                                     <CommandItem

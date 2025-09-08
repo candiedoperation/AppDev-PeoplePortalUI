@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/sidebar"
 import { SidebarUserInfo } from "./fabric/SidebarUserInfo"
 import { Link, useLocation } from "react-router-dom"
+import type { CorpUserInfo } from "@/pages/CorpDashboard"
 
 interface SideBarMenuItemData {
   title: string,
@@ -79,9 +80,24 @@ const data: SideBarMenuItemData[] = [
         },
       ],
     },
+
+    {
+      title: "Platform Information",
+      items: [
+        {
+          title: "Licensing",
+          url: "/platform/license",
+        },
+
+        {
+          title: "Support Docs",
+          url: "/platform/support"
+        }
+      ],
+    },
 ]
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar> & { userInfo: CorpUserInfo }) {
   const location = useLocation()
   
   return (
@@ -132,7 +148,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter>
-        <SidebarUserInfo user={{ name: "Atheesh Th", email: "atheesh@atheesh.org", avatar: "A" }} />
+        <SidebarUserInfo userInfo={props.userInfo} />
       </SidebarFooter>
     </Sidebar>
   )

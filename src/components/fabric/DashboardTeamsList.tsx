@@ -16,6 +16,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
+import { Textarea } from "../ui/textarea";
 
 export interface PaginationDefinition {
 
@@ -184,6 +185,7 @@ interface CreateNewTeamDialogProps {
 const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const submitURL = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/create`
     const [teamName, setTeamName] = React.useState("")
+    const [teamDescription, setTeamDescription] = React.useState("")
     const [teamSeason, setTeamSeason] = React.useState<string>()
     const [teamType, setTeamType] = React.useState("");
     const [teamYear] = React.useState<number>(new Date().getFullYear())
@@ -198,7 +200,8 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                 friendlyName: teamName,
                 teamType: teamType,
                 seasonYear: teamYear,
-                seasonType: teamSeason
+                seasonType: teamSeason,
+                description: teamDescription
             })
         }).then((_res) => {
             toast.success(`New ${teamType.toLowerCase()} team for ${teamName} (${teamSeason} ${teamYear}) successfully created!`)
@@ -227,6 +230,10 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                         <div className="grid gap-3">
                             <Label htmlFor="name-1">Team Name</Label>
                             <Input placeholder="Minimum 3 Characters" required value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+                        </div>
+                        <div className="grid gap-3">
+                            <Label htmlFor="name-1">Team Description</Label>
+                            <Textarea maxLength={200} placeholder="Ex. Developing an MLOps pipeline for Brain Tumor Segmentation Models" required value={teamDescription} onChange={(e) => setTeamDescription(e.target.value)} />
                         </div>
                         <div className="grid gap-3">
                             <Label htmlFor="username-1">Team Type</Label>

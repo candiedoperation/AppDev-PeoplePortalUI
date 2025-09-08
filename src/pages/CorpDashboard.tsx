@@ -16,6 +16,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
 import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/sidebar"
 import React from "react"
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 
 const translateBreadcrumbPath = (path: string) => {
     switch (path) {
@@ -64,10 +66,21 @@ interface BreadcrumbItem {
     path: string
 }
 
+export interface CorpUserInfo {
+    name: string,
+    avatar: string,
+    email: string
+}
+
 export const CorpDashboard = () => {
     const location = useLocation()
     const navigate = useNavigate()
     const [breadcrumbs, setBreadcrumbs] = React.useState<BreadcrumbItem[]>([]);
+    const [userInfo, setUserInfo] = React.useState<CorpUserInfo>({
+        name: "Unknown",
+        email: "unknown@unknown.local",
+        avatar: ""
+    });
 
     React.useEffect(() => {
         const path = location.pathname;
@@ -91,6 +104,17 @@ export const CorpDashboard = () => {
         setBreadcrumbs(() => breadcrumbsList)
     }, [location]);
 
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/userinfo`)
+        .then(async (response) => {
+            const userlistResponse: CorpUserInfo = await response.json()
+            setUserInfo(_ => userlistResponse)
+        })
+        .catch((e) => {
+            toast.error("Failed to Fetch User Information: " + e.message)
+        })
+    }, []);
+
     return (
         <SidebarProvider
             style={
@@ -99,7 +123,7 @@ export const CorpDashboard = () => {
                 } as React.CSSProperties
             }
         >
-            <AppSidebar />
+            <AppSidebar userInfo={userInfo} />
             <SidebarInset>
                 <header className="flex h-16 shrink-0 items-center gap-2 px-4">
                     <SidebarTrigger className="-ml-1" />

@@ -21,6 +21,7 @@ import { UserOnboarding } from './pages/UserOnboarding'
 import { Toaster } from 'sonner'
 import { CorpDashboard } from './pages/CorpDashboard'
 import { ThemeProvider } from './components/fabric/ThemeProvider'
+import { ATSDashboard } from './pages/ATSDashboard'
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
         <Routes>
           <Route path="/*" element={<CorpDashboard />} />
           <Route path="/onboard/:onboardId/*" element={<UserOnboarding />} />
+          <Route path="/apply/*" element={<ATSDashboard />} />
         </Routes>
       </div>
     </ThemeProvider>

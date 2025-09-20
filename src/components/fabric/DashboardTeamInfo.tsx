@@ -1,8 +1,8 @@
-import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, WorkflowIcon } from "lucide-react"
+import { Check, ChevronsUpDown, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { TabsContent } from "@radix-ui/react-tabs";
@@ -18,13 +18,16 @@ import type { GetUserListResponse } from "./DashboardPeopleList";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ProgressUpdateDialog } from "../fragments/ProgressUpdateDialog";
+import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
+import { Separator } from "../ui/separator";
+import { Switch } from "../ui/switch";
 
-interface TeamInfoResponse {
+export interface TeamInfoResponse {
     team: TeamInfo,
     subteams: TeamInfo[]
 }
 
-interface TeamInfo {
+export interface TeamInfo {
     pk: string,
     name: string,
     users: UserInformationBrief[],
@@ -37,11 +40,26 @@ interface TeamInfo {
     }
 }
 
+interface BindleInformation {
+    friendlyName: string,
+    description: string
+}
+
+interface BindleDefinitionMap {
+    /* Client Name */
+    [key: string]: {
+        /* Bindle ID */
+        [key: string]: BindleInformation
+    }
+}
+
 export const DashboardTeamInfo = () => {
     const params = useParams()
+    const navigate = useNavigate()
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
     const [addMembersOpen, setAddMembersOpen] = React.useState(false);
+    const [subteamsOpen, setSubteamsOpen] = React.useState(false);
 
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [syncDialogProgress, setSyncDialogProgress] = React.useState(0);
@@ -65,7 +83,7 @@ export const DashboardTeamInfo = () => {
         setSyncDialogProgress(0)
         setSyncDialogStatus("Connecting to Server...")
         setSyncDialogOpen(true)
-        
+
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/syncbindles`, {
             method: "PATCH"
         }).then(async response => {
@@ -76,12 +94,12 @@ export const DashboardTeamInfo = () => {
 
             const reader = response.body.getReader();
             let decoder = new TextDecoder();
-            
+
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) 
+                if (done)
                     break;
-                
+
                 const update = JSON.parse(decoder.decode(value, { stream: true }));
                 setSyncDialogProgress(update.progressPercent)
                 setSyncDialogStatus(update.status)
@@ -99,6 +117,7 @@ export const DashboardTeamInfo = () => {
         <div className="flex flex-col m-2">
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
             <ProgressUpdateDialog open={syncDialogOpen} title="Syncing Shared Permissions" description="Please wait while the permissions propagate across Shared Resources" status={syncDialogStatus} progressPercent={syncDialogProgress} />
+            <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} />
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
@@ -115,12 +134,12 @@ export const DashboardTeamInfo = () => {
             <div className="mt-3">
                 <h3 className="text-lg">Manage Your Team</h3>
                 <div className="flex gap-2 mt-2">
-                    <Button variant="outline" className="cursor-pointer">
+                    <Button onClick={() => navigate("./recruitment")} variant="outline" className="cursor-pointer">
                         <NotebookPenIcon />
                         Recruitment
                     </Button>
 
-                    <Button variant="outline" className="cursor-pointer">
+                    <Button onClick={() => setSubteamsOpen(true)} variant="outline" className="cursor-pointer">
                         <WorkflowIcon />
                         Manage Subteams
                     </Button>
@@ -128,6 +147,11 @@ export const DashboardTeamInfo = () => {
                     <Button onClick={syncBindles} variant="outline" className="cursor-pointer">
                         <RefreshCcwIcon />
                         Sync Shared Permissions
+                    </Button>
+                    
+                    <Button onClick={syncBindles} variant="outline" className="cursor-pointer">
+                        <SettingsIcon />
+                        Team Settings
                     </Button>
                 </div>
             </div>
@@ -214,7 +238,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
         } else if (currentTab == "invite") {
             if (!selectedSubTeam)
                 return
-            
+
             setIsLoading(true)
             fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/new`, {
                 method: "POST",
@@ -264,14 +288,14 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                                     <TriangleAlertIcon />
                                     <AlertTitle>Recruitment Override Warning</AlertTitle>
                                     <AlertDescription>
-                                    By directly adding a member, you're bypassing App Dev's standard recruitment procedures. Please use this feature only if
-                                    you are entirely sure that this person would be a great fit for the team and that they would align with App Dev's culture and standards.
+                                        By directly adding a member, you're bypassing App Dev's standard recruitment procedures. Please use this feature only if
+                                        you are entirely sure that this person would be a great fit for the team and that they would align with App Dev's culture and standards.
                                     </AlertDescription>
                                 </Alert>
-                                
+
                                 <Label className="mt-2">Candidate's Name</Label>
                                 <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
-                                
+
                                 <Label className="mt-2">Candidate's Email Address</Label>
                                 <Input value={inviteEmailAddress} onChange={(e) => setInviteEmailAddress(e.target.value)} placeholder="Ex. atheesh@terpmail.umd.edu" />
                             </TabsContent>
@@ -427,6 +451,107 @@ const MembersFilterPopover = (props: { handleSelect: (member: UserInformationBri
                 </Command>
             </PopoverContent>
         </Popover>
+    )
+}
+
+const SubteamsInfoDialog = (props: {
+    open: boolean,
+    openChanged: (open: boolean) => void
+    subteams: TeamInfo[]
+}) => {
+    const [currentSubTeam, setCurrentSubTeam] = React.useState<TeamInfo>()
+    const [bindleDefinitions, setBindleDefinitions] = React.useState<BindleDefinitionMap>({})
+
+    React.useEffect(() => {
+        if (props.open)
+            setCurrentSubTeam(_ => props.subteams[0])
+    }, [props.open])
+
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/bindles/definitions`)
+            .then(async (response) => {
+                const fetchedBindleDefinitions = await response.json()
+                setBindleDefinitions(_ => ({
+                    ...fetchedBindleDefinitions,
+                    "SlackClient": {
+                        "slack:abbc": {
+                            friendlyName: "Enable Ass",
+                            description: "Enables ur Ass"
+                        }
+                    }
+                }))
+            })
+            .catch((e) => {
+                toast.error("Failed to Bindle Permissions: " + e.message)
+            })
+    }, [])
+
+    function normalizeClientName(clientName: string) {
+        switch (clientName) {
+            case "GiteaClient":
+                return "Git Permissions"
+
+            case "SlackClient": 
+                return "Slack Permissions"
+        }
+    }
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.openChanged}>
+            <DialogContent className="min-w-[60%] min-h-[60%] p-0 select-none">
+                <div className="flex">
+                    <SidebarGroup className="w-[30%] select-none">
+                        <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
+                        <SidebarGroupContent>
+                            <SidebarMenu>
+                                {props.subteams.map((subteam) => (
+                                    <SidebarMenuItem key={subteam.pk}>
+                                    <SidebarMenuButton className="cursor-pointer" onClick={() => { setCurrentSubTeam(_ => subteam) }} isActive={currentSubTeam?.pk == subteam.pk} asChild>
+                                        <a>
+                                            <Users2Icon />
+                                            <span>{subteam.attributes.friendlyName}</span>
+                                        </a>
+                                    </SidebarMenuButton>
+                                </SidebarMenuItem>
+                                ))}
+                            </SidebarMenu>
+                        </SidebarGroupContent>
+                    </SidebarGroup>
+
+                    <Separator orientation="vertical" />
+                    <div className="flex-grow-1 m-4">
+                        <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
+                        <h3 className="text-muted-foreground">{currentSubTeam?.attributes.description}</h3>
+                        
+                        <div className="flex flex-col mt-2">
+                            {
+                                Object.keys(bindleDefinitions).map((sharedResource) => (
+                                    <div className="flex flex-col mt-2">
+                                        <p className="text-muted-foreground text-sm">{normalizeClientName(sharedResource)}</p>
+                                        {
+                                            Object.keys(bindleDefinitions[sharedResource]).map((bindleEntry) => {
+                                                const bindleDefinition = bindleDefinitions[sharedResource][bindleEntry]
+
+                                                return (
+                                                    <div className="flex border-1 p-2 rounded-md mt-2 items-center">
+                                                        <div className="flex flex-col text-sm flex-grow-1">
+                                                            <p>{bindleDefinition.friendlyName}</p>
+                                                            <p className="text-muted-foreground text-sm">{bindleDefinition.description}</p>
+                                                        </div>
+
+                                                        <Switch />
+                                                    </div>
+                                                )
+                                            })
+                                        }
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
     )
 }
 

@@ -23,13 +23,26 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ORGANIZATION_NAME } from '@/commons/strings'
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from '@/components/ui/sidebar'
-import { CheckCircle2Icon, Loader2Icon, Lock, MessagesSquare, Signature, TriangleAlertIcon, XCircleIcon } from 'lucide-react'
+import { Check, CheckCircle2Icon, ChevronsUpDown, Loader2Icon, Lock, MessagesSquare, Signature, TriangleAlertIcon, UploadCloudIcon, User2Icon, XCircleIcon } from 'lucide-react'
 import React from 'react'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { toast } from "sonner"
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { PhoneInput } from '@/components/ui/phone-input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { cn } from '@/lib/utils'
+
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command"
 
 interface CompleteSetupStageProps {
     stages: { name: string, status: boolean }[],
@@ -57,6 +70,21 @@ interface ProprietaryInformationStageProps {
     stepComplete: (status: boolean) => void
 }
 
+interface PersonalInfoData {
+
+}
+
+interface PersonalInfoStageProps {
+    stepComplete: (data: PersonalInfoData) => void
+}
+
+interface UMDApiMajorListResponse {
+    college: string,
+    major_id: string,
+    name: string,
+    url: string
+}
+
 export const UserOnboarding = () => {
     const params = useParams()
     const location = useLocation()
@@ -64,13 +92,15 @@ export const UserOnboarding = () => {
 
     const slackJoinComplete = React.useRef(false);
     const ipAgreementComplete = React.useRef(false);
+    const personalInfoRef = React.useRef({});
     const createdPasswordRef = React.useRef("");
     const currentStepRef = React.useRef(0);
 
     const basePath = `/onboard/${params.onboardId}`
     const ONBOARDING_FLOWLIST = [
         { title: "Create Password", path: "loginsetup", icon: Lock },
-        { title: "Proprietary Information", path: "legal", icon: Signature },
+        { title: "Personal Information", path: "identity", icon: User2Icon },
+        { title: "Legal Agreements", path: "legal", icon: Signature },
         { title: "Join App Dev Slack", path: "slack", icon: MessagesSquare },
         { title: "Complete Setup", path: "complete", icon: CheckCircle2Icon }
     ]
@@ -91,6 +121,11 @@ export const UserOnboarding = () => {
         handleNextStep()
     }
 
+    const handlePersonalInfoComplete = (personalInfo: PersonalInfoData) => {
+        personalInfoRef.current = personalInfo
+        handleNextStep()
+    }
+
     const handleIPAgreementComplete = (status: boolean) => {
         ipAgreementComplete.current = status;
         handleNextStep()
@@ -105,6 +140,10 @@ export const UserOnboarding = () => {
     const handleFormSubmit = () => {
         /* Send a Request to Create the User in Authentik, Setup Accounts, etc. */
     }
+
+    const [personalInfoProps, setPersonalInfoProps] = React.useState({
+        stepComplete: handlePersonalInfoComplete
+    })
 
     const [passwordStageProps, setPasswordStageProps] = React.useState({
         name: "Loading",
@@ -167,11 +206,13 @@ export const UserOnboarding = () => {
                             <Route path="/loginsetup" element={<CreatePasswordStage defaultPassword={createdPasswordRef.current} {...passwordStageProps} />} />
                             <Route path='/legal' element={<ProprietaryInformationStage defaultSigned={ipAgreementComplete.current} stepComplete={handleIPAgreementComplete} />} />
                             <Route path='/slack' element={<SlackJoinStage defaultVerified={slackJoinComplete.current} {...slackJoinProps} />} />
+                            <Route path='/identity' element={<PersonalInfoStage {...personalInfoProps} />} />
                             <Route path='/complete' element={
-                                <CompleteSetupStage 
+                                <CompleteSetupStage
                                     stepComplete={handleNextStep}
                                     stages={[
                                         { name: "Password Creation", status: createdPasswordRef.current.length >= 8 },
+                                        { name: "Personal Information", status: createdPasswordRef.current.length >= 8 },
                                         { name: "Intellectual Property Agreement", status: ipAgreementComplete.current },
                                         { name: "Join App Dev Slack", status: slackJoinComplete.current }
                                     ]}
@@ -196,7 +237,7 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
             }
         }
     }, []);
-    
+
     return (
         <div className='flex flex-col h-full w-full justify-center items-center p-12'>
             <CardTitle>You're almost there!</CardTitle>
@@ -216,9 +257,9 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
                                 <TableRow>
                                     <TableCell>{stage.name}</TableCell>
                                     <TableCell>{
-                                        stage.status ? 
-                                        <span className='flex gap-1 items-center text-green-500'><CheckCircle2Icon size="16" /> Complete</span> : 
-                                        <span className='flex gap-1 items-center text-red-400'><XCircleIcon size="16"/> Incomplete</span>
+                                        stage.status ?
+                                            <span className='flex gap-1 items-center text-green-500'><CheckCircle2Icon size="16" /> Complete</span> :
+                                            <span className='flex gap-1 items-center text-red-400'><XCircleIcon size="16" /> Incomplete</span>
                                     }</TableCell>
                                 </TableRow>
                             ))
@@ -226,14 +267,139 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
                     </TableBody>
                 </Table>
 
-                <Button 
-                    className='mt-5' 
+                <Button
+                    className='mt-5'
                     disabled={!allStepsComplete}
                     onClick={props.stepComplete}
                 >
                     Finish Setup
                 </Button>
             </div>
+        </div>
+    )
+}
+
+const PersonalInfoStage = (props: PersonalInfoStageProps) => {
+    const [preview, setPreview] = React.useState<string | null>(null);
+    const fileUploadRef = React.useRef<HTMLInputElement>(null)
+    const [phoneNumber, setPhoneNumber] = React.useState("")
+    const [selectedMajor, setSelectedMajor] = React.useState<UMDApiMajorListResponse>()
+
+    const [majorListOpen, setMajorListOpen] = React.useState(false)
+    const [majors, setMajors] = React.useState<UMDApiMajorListResponse[]>([])
+    const [expectedGraduation, setExpectedGraduation] = React.useState("")
+
+    React.useEffect(() => {
+        fetch("https://api.umd.io/v1/majors/list")
+            .then(async (res) => (await res.json()))
+            .then((majors) => { setMajors(majors) })
+            .catch(() => {
+                toast.error("Failed to Fetch Majors", {
+                    description: "Major List Fetch Failed from University of Maryland Community APIs"
+                })
+            })
+    }, [])
+
+    function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+        const file = e.target.files?.[0];
+        if (file) {
+            const url = URL.createObjectURL(file);
+            setPreview(url);
+            console.log(url)
+            // TODO: upload to server with fetch/FormData
+        }
+    }
+
+    return (
+        <div className='flex flex-col h-full w-full items-center justify-center p-12'>
+            <Avatar title='Upload Profile Picture' onClick={() => fileUploadRef.current?.click()} className="size-32 rounded-full cursor-pointer">
+                <AvatarImage src={preview ?? undefined} alt="Profile" />
+                <AvatarFallback><UploadCloudIcon className='size-8' /></AvatarFallback>
+            </Avatar>
+            <p className='mt-4 mb-2'>Upload your Profile Picture</p>
+
+            <Input
+                ref={fileUploadRef}
+                id="avatar-upload"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={onFileChange}
+            />
+
+            <div className={'grid gap-2 w-lg mt-5'}>
+                <Label>What's your Major?</Label>
+                <Popover open={majorListOpen} onOpenChange={setMajorListOpen}>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={majorListOpen}
+                            className="justify-between max-w-full"
+                        >
+                            {selectedMajor
+                                ? selectedMajor.name
+                                : "No Major Chosen"}
+                            <ChevronsUpDown className="opacity-50" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[600px] max-w-[600px] p-0">
+                        <Command>
+                            <CommandInput placeholder="Search UMD Major" className="h-9" />
+                            <CommandList>
+                                <CommandEmpty>No Majors Found</CommandEmpty>
+                                <CommandGroup>
+                                    {majors.map((framework) => (
+                                        <CommandItem
+                                            key={framework.major_id}
+                                            value={framework.name}
+                                            onSelect={(currentValue) => {
+                                                setSelectedMajor(framework)
+                                                setMajorListOpen(false)
+                                            }}
+                                        >
+                                            <div className='flex flex-col'>
+                                                <span>{framework.name}</span>
+                                                <span className='text-sm text-muted-foreground'>{framework.college}</span>
+                                            </div>
+                                            <Check
+                                                className={cn(
+                                                    "ml-auto",
+                                                    selectedMajor?.major_id === framework.major_id ? "opacity-100" : "opacity-0"
+                                                )}
+                                            />
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
+                    </PopoverContent>
+                </Popover>
+            </div>
+
+            <div className={'grid gap-2 w-lg mt-5'}>
+                <Label>Expected Graduation</Label>
+                <Input
+                    type='date'
+                    value={expectedGraduation}
+                    onChange={(e) => setExpectedGraduation(e.target.value)}
+                />
+            </div>
+
+            <div className={'grid gap-2 w-lg mt-5'}>
+                <Label>Phone Number</Label>
+                <PhoneInput
+                    defaultCountry='US'
+                    placeholder="Enter phone number"
+                    value={phoneNumber}
+                    onChange={(number) => setPhoneNumber(number)} />
+            </div>
+
+            <Button
+                className='mt-8'
+                // onClick={}
+                disabled={!expectedGraduation || !selectedMajor || !phoneNumber || !preview}
+            >Continue</Button>
         </div>
     )
 }
@@ -245,7 +411,7 @@ const SlackJoinStage = (props: SlackJoinStageProps) => {
     const verifyJoinStatus = () => {
         setIsLoading(true)
         setTimeout(() => {
-            toast.error("Verification Failed!", { 
+            toast.error("Verification Failed!", {
                 description: "We couldn't verify that you're in the App Dev Slack. Please make sure that you used the correct email address and invite link as mentioned in the instructions."
             })
             setIsLoading(false);

@@ -20,6 +20,7 @@ import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
 import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
+import { DashboardTeamRecruitment } from "@/components/fabric/DashboardTeamRecuitment"
 import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import {
     Breadcrumb,
@@ -55,6 +56,9 @@ const translateBreadcrumbPath = (path: string) => {
 
         case "events":
             return "Events"
+
+        case "recruitment":
+            return "Recruitment Tracker"
 
         default:
             return path
@@ -162,6 +166,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/people" element={<DashboardPeopleList />} />
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
+                        <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                     </Routes>
                 </div>
             </SidebarInset>

@@ -44,6 +44,7 @@ export const DashboardTeamsList = () => {
 
     const columns: ColumnDef<TeamInformationBrief>[] = [
         { accessorKey: 'friendlyName', header: "Team Name" },
+        { accessorKey: 'description', header: "Description" },
         { accessorKey: 'teamType', header: "Team Vertical" },
         { accessorKey: "name", header: "Shared Resources ID" }
     ]
@@ -137,6 +138,14 @@ export const DashboardTeamsList = () => {
                                                         switch (cell.column.id) {
                                                             case "memberSince": {
                                                                 return format(cell.getValue() as string, "PPP")
+                                                            }
+
+                                                            case "description": {
+                                                                const str = cell.getValue() as string
+                                                                if (str && str.length > 20)
+                                                                    return `${str.slice(0, 20)}...`
+
+                                                                return str
                                                             }
 
                                                             case "friendlyName": {

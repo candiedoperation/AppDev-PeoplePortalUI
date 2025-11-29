@@ -43,6 +43,7 @@ import {
     CommandItem,
     CommandList,
 } from "@/components/ui/command"
+import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config'
 
 interface CompleteSetupStageProps {
     stages: { name: string, status: boolean }[],
@@ -71,10 +72,14 @@ interface ProprietaryInformationStageProps {
 }
 
 interface PersonalInfoData {
-
+    profileUrl: string,
+    major: UMDApiMajorListResponse,
+    expectedGrad: string,
+    phoneNumber: string
 }
 
 interface PersonalInfoStageProps {
+    defaultData: PersonalInfoData | undefined,
     stepComplete: (data: PersonalInfoData) => void
 }
 
@@ -85,14 +90,24 @@ interface UMDApiMajorListResponse {
     url: string
 }
 
+interface APIInviteInfo {
+    inviteName: string;
+    inviteEmail: string;
+    roleTitle: string;
+    teamPk: string;
+    inviterPk: number;
+    expiresAt: Date;
+}
+
 export const UserOnboarding = () => {
     const params = useParams()
     const location = useLocation()
     const navigate = useNavigate()
 
+    const [inviteInfo, setInviteInfo] = React.useState<APIInviteInfo>()
     const slackJoinComplete = React.useRef(false);
     const ipAgreementComplete = React.useRef(false);
-    const personalInfoRef = React.useRef({});
+    const personalInfoRef = React.useRef<PersonalInfoData>(undefined);
     const createdPasswordRef = React.useRef("");
     const currentStepRef = React.useRef(0);
 
@@ -139,6 +154,19 @@ export const UserOnboarding = () => {
 
     const handleFormSubmit = () => {
         /* Send a Request to Create the User in Authentik, Setup Accounts, etc. */
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/${params.onboardId}`, {
+            method: "PUT",
+            headers: {
+                'Content-Type': 'application/json'
+            },
+
+            body: JSON.stringify({
+                password: createdPasswordRef.current,
+                major: personalInfoRef.current?.major.name,
+                expectedGrad: personalInfoRef.current?.expectedGrad,
+                phoneNumber: personalInfoRef.current?.phoneNumber
+            })
+        })
     }
 
     const [personalInfoProps, setPersonalInfoProps] = React.useState({
@@ -161,6 +189,26 @@ export const UserOnboarding = () => {
 
     React.useEffect(() => {
         /* Fetch the Onboarding Information using UUID */
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/${params.onboardId}`)
+            .then(async (res) => {
+                if (res.status != 200)
+                    throw new Error(res.statusText)
+
+                const inviteData = await res.json() as APIInviteInfo
+                setInviteInfo(inviteData)
+                setPasswordStageProps((existingProps) => ({
+                    ...existingProps,
+                    name: inviteData.inviteName,
+                    email: inviteData.inviteEmail,
+                    role: inviteData.roleTitle
+                }))
+            })
+
+            .catch(() => {
+                toast.error("Failed to Fetch Invite Info!", {
+                    description: `Please check if the Invite Link is Valid!`
+                })
+            })
     }, [])
 
     return (
@@ -206,13 +254,13 @@ export const UserOnboarding = () => {
                             <Route path="/loginsetup" element={<CreatePasswordStage defaultPassword={createdPasswordRef.current} {...passwordStageProps} />} />
                             <Route path='/legal' element={<ProprietaryInformationStage defaultSigned={ipAgreementComplete.current} stepComplete={handleIPAgreementComplete} />} />
                             <Route path='/slack' element={<SlackJoinStage defaultVerified={slackJoinComplete.current} {...slackJoinProps} />} />
-                            <Route path='/identity' element={<PersonalInfoStage {...personalInfoProps} />} />
+                            <Route path='/identity' element={<PersonalInfoStage defaultData={personalInfoRef.current} {...personalInfoProps} />} />
                             <Route path='/complete' element={
                                 <CompleteSetupStage
                                     stepComplete={handleNextStep}
                                     stages={[
                                         { name: "Password Creation", status: createdPasswordRef.current.length >= 8 },
-                                        { name: "Personal Information", status: createdPasswordRef.current.length >= 8 },
+                                        { name: "Personal Information", status: personalInfoRef.current != undefined },
                                         { name: "Intellectual Property Agreement", status: ipAgreementComplete.current },
                                         { name: "Join App Dev Slack", status: slackJoinComplete.current }
                                     ]}
@@ -280,14 +328,14 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
 }
 
 const PersonalInfoStage = (props: PersonalInfoStageProps) => {
-    const [preview, setPreview] = React.useState<string | null>(null);
+    const [preview, setPreview] = React.useState<string | null>(props.defaultData?.profileUrl ?? null);
     const fileUploadRef = React.useRef<HTMLInputElement>(null)
-    const [phoneNumber, setPhoneNumber] = React.useState("")
-    const [selectedMajor, setSelectedMajor] = React.useState<UMDApiMajorListResponse>()
+    const [phoneNumber, setPhoneNumber] = React.useState(props.defaultData?.phoneNumber ?? "")
+    const [selectedMajor, setSelectedMajor] = React.useState<UMDApiMajorListResponse | undefined>(props.defaultData?.major)
 
     const [majorListOpen, setMajorListOpen] = React.useState(false)
     const [majors, setMajors] = React.useState<UMDApiMajorListResponse[]>([])
-    const [expectedGraduation, setExpectedGraduation] = React.useState("")
+    const [expectedGraduation, setExpectedGraduation] = React.useState(props.defaultData?.expectedGrad ?? "")
 
     React.useEffect(() => {
         fetch("https://api.umd.io/v1/majors/list")
@@ -397,8 +445,13 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
 
             <Button
                 className='mt-8'
-                // onClick={}
                 disabled={!expectedGraduation || !selectedMajor || !phoneNumber || !preview}
+                onClick={() => props.stepComplete({
+                    profileUrl: preview!,
+                    major: selectedMajor!,
+                    expectedGrad: expectedGraduation,
+                    phoneNumber: phoneNumber
+                })}
             >Continue</Button>
         </div>
     )
@@ -410,12 +463,29 @@ const SlackJoinStage = (props: SlackJoinStageProps) => {
 
     const verifyJoinStatus = () => {
         setIsLoading(true)
-        setTimeout(() => {
-            toast.error("Verification Failed!", {
-                description: "We couldn't verify that you're in the App Dev Slack. Please make sure that you used the correct email address and invite link as mentioned in the instructions."
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/tools/verifyslack`, {
+                method: "POST",
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+
+                body: JSON.stringify({
+                    email: props.email
+                })
+            }).then(async (res) => {
+                const status: boolean = await res.json()
+                if (!status)
+                    throw new Error("Not Joined!")
+
+                setIsLoading(false)
+                setSlackJoinVerified(true)
+                props.stepComplete(true)
+            }).catch(() => {
+                setIsLoading(false)
+                toast.error("Verification Failed!", {
+                    description: "We couldn't verify that you're in the App Dev Slack. Please make sure that you used the correct email address and invite link as mentioned in the instructions."
+                })
             })
-            setIsLoading(false);
-        }, 1500);
     }
 
     return (

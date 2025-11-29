@@ -18,7 +18,7 @@ import type { GetUserListResponse } from "./DashboardPeopleList";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ProgressUpdateDialog } from "../fragments/ProgressUpdateDialog";
-import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
+import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
 import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
 
@@ -45,11 +45,24 @@ interface BindleInformation {
     description: string
 }
 
+interface RootTeamSettingInfo {
+    friendlyName: string,
+    description: string
+}
+
 interface BindleDefinitionMap {
     /* Client Name */
     [key: string]: {
         /* Bindle ID */
         [key: string]: BindleInformation
+    }
+}
+
+interface RootTeamSettingMap {
+    /* Client Name */
+    [key: string]: {
+        /* Setting ID */
+        [key: string]: RootTeamSettingInfo
     }
 }
 
@@ -60,6 +73,7 @@ export const DashboardTeamInfo = () => {
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
     const [addMembersOpen, setAddMembersOpen] = React.useState(false);
     const [subteamsOpen, setSubteamsOpen] = React.useState(false);
+    const [teamSettingsOpen, setTeamSettingsOpen] = React.useState(false);
 
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [syncDialogProgress, setSyncDialogProgress] = React.useState(0);
@@ -118,6 +132,7 @@ export const DashboardTeamInfo = () => {
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
             <ProgressUpdateDialog open={syncDialogOpen} title="Syncing Shared Permissions" description="Please wait while the permissions propagate across Shared Resources" status={syncDialogStatus} progressPercent={syncDialogProgress} />
             <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} />
+            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} />
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
@@ -149,7 +164,7 @@ export const DashboardTeamInfo = () => {
                         Sync Shared Permissions
                     </Button>
                     
-                    <Button onClick={syncBindles} variant="outline" className="cursor-pointer">
+                    <Button onClick={() => setTeamSettingsOpen(true)} variant="outline" className="cursor-pointer">
                         <SettingsIcon />
                         Team Settings
                     </Button>
@@ -550,6 +565,70 @@ const SubteamsInfoDialog = (props: {
                         </div>
                     </div>
                 </div>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const TeamSettingsDialog = (props: {
+    open: boolean,
+    openChanged: (open: boolean) => void,
+    teamInfo?: TeamInfo
+}) => {
+    const [settingDefinitions, setSettingDefinitions] = React.useState<RootTeamSettingMap>({})
+    const teamInfo = props.teamInfo;
+
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`)
+            .then(async (response) => {
+                const fetchedSettingDefinitions = await response.json()
+                setSettingDefinitions(_ => (fetchedSettingDefinitions))
+            })
+
+            .catch((e) => {
+                toast.error("Failed to fetch Root Team Settings: " + e.message)
+            })
+    }, [])
+
+    function normalizeClientName(clientName: string) {
+        switch (clientName) {
+            case "AWSClient":
+                return "Amazon Web Services"
+        }
+    }
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.openChanged}>
+            <DialogContent className="min-w-lg min-h-[60%] p-0 select-none">
+                <div className="flex-grow-1 m-4">
+                        <h1 className="text-2xl">Team Settings</h1>
+                        <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
+                        
+                        <div className="flex flex-col mt-2">
+                            {
+                                Object.keys(settingDefinitions).map((sharedResource) => (
+                                    <div className="flex flex-col mt-2">
+                                        <p className="text-muted-foreground text-sm">{normalizeClientName(sharedResource)}</p>
+                                        {
+                                            Object.keys(settingDefinitions[sharedResource]).map((bindleEntry) => {
+                                                const settingDefinition = settingDefinitions[sharedResource][bindleEntry]
+                                                return (
+                                                    <div className="flex border-1 p-2 rounded-md mt-2 items-center">
+                                                        <div className="flex flex-col text-sm flex-grow-1">
+                                                            <p>{settingDefinition.friendlyName}</p>
+                                                            <p className="text-muted-foreground text-sm">{settingDefinition.description}</p>
+                                                        </div>
+
+                                                        <Switch />
+                                                    </div>
+                                                )
+                                            })
+                                        }
+                                    </div>
+                                ))
+                            }
+                        </div>
+                    </div>
             </DialogContent>
         </Dialog>
     )

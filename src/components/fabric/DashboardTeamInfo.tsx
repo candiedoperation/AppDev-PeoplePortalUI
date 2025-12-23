@@ -131,46 +131,16 @@ export const DashboardTeamInfo = () => {
         });
     }
 
-    function saveTeamSettings(settings: { [key: string]: boolean }) {
-        setSyncDialogProgress(0)
-        setSyncDialogStatus("Saving Settings...")
-        setSyncDialogOpen(true)
-        setTeamSettingsOpen(false)
-
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/rootsetting`, {
+    function saveTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }) {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/updateconf`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settings)
         }).then(async response => {
-            if (!response.body) {
-                console.error("no body")
-                return
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`)
             }
 
-            const reader = response.body.getReader();
-            let decoder = new TextDecoder();
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const textChunk = decoder.decode(value, { stream: true });
-                const validJSONs = textChunk.match(/\{.*?\}/g);
-                if (validJSONs) {
-                    validJSONs.forEach(jsonStr => {
-                        try {
-                            const update = JSON.parse(jsonStr);
-                            if (update.error) {
-                                toast.error(update.status);
-                            } else {
-                                setSyncDialogProgress(update.progressPercent);
-                                setSyncDialogStatus(update.status);
-                            }
-                        } catch (e2) { }
-                    });
-                }
-            }
-            setSyncDialogOpen(false);
             toast.success("Team settings saved successfully!")
 
             // Refresh team info to get latest settings
@@ -181,7 +151,6 @@ export const DashboardTeamInfo = () => {
                 })
 
         }).catch(e => {
-            setSyncDialogOpen(false);
             toast.error(`Failed to save settings: ${e.message}`)
         });
     }
@@ -717,11 +686,12 @@ const TeamSettingsDialog = (props: {
     open: boolean,
     openChanged: (open: boolean) => void,
     teamInfo?: TeamInfo,
-    onSave: (settings: { [key: string]: boolean }) => void
+    onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void
 }) => {
     const params = useParams()
     const [settingDefinitions, setSettingDefinitions] = React.useState<RootTeamSettingMap>({})
-    const [changedSettings, setChangedSettings] = React.useState<{ [key: string]: boolean }>({})
+    // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
+    const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
     const [isLoading, setIsLoading] = React.useState(false)
 
     /* Fetch fresh team settings when dialog opens */
@@ -738,15 +708,22 @@ const TeamSettingsDialog = (props: {
             .then(([definitions, teamResponse]) => {
                 setSettingDefinitions(definitions)
 
-                /* Initialize changedSettings from fresh data */
-                const initialSettings: { [key: string]: boolean } = {};
+                /* Initialize changedSettings from fresh data, preserving the nested structure */
                 const rootTeamSettings = teamResponse.team.attributes.rootTeamSettings || {};
-                for (const resourceName in rootTeamSettings) {
-                    const settings = rootTeamSettings[resourceName];
-                    for (const key in settings) {
-                        initialSettings[key] = settings[key];
+
+                // Build the initial settings object with all defined settings
+                const initialSettings: { [clientName: string]: { [settingKey: string]: boolean } } = {};
+
+                // Iterate through all defined settings and initialize them
+                for (const clientName in definitions) {
+                    initialSettings[clientName] = {};
+                    for (const settingKey in definitions[clientName]) {
+                        // Get the value from existing settings, or default to false
+                        const existingValue = rootTeamSettings[clientName]?.[settingKey];
+                        initialSettings[clientName][settingKey] = existingValue ?? false;
                     }
                 }
+
                 setChangedSettings(initialSettings);
             })
             .catch((e) => {
@@ -767,10 +744,13 @@ const TeamSettingsDialog = (props: {
         }
     }
 
-    const toggleSetting = (key: string, currentValue: boolean) => {
+    const toggleSetting = (clientName: string, settingKey: string, currentValue: boolean) => {
         setChangedSettings(prev => ({
             ...prev,
-            [key]: !currentValue
+            [clientName]: {
+                ...prev[clientName],
+                [settingKey]: !currentValue
+            }
         }))
     }
 
@@ -789,22 +769,22 @@ const TeamSettingsDialog = (props: {
                     ) : (
                         <div className="flex flex-col mt-2">
                             {
-                                Object.keys(settingDefinitions).map((sharedResource) => (
-                                    <div key={sharedResource} className="flex flex-col mt-2">
-                                        <p className="text-muted-foreground text-sm">{normalizeClientName(sharedResource)}</p>
+                                Object.keys(settingDefinitions).map((clientName) => (
+                                    <div key={clientName} className="flex flex-col mt-2">
+                                        <p className="text-muted-foreground text-sm">{normalizeClientName(clientName)}</p>
                                         {
-                                            Object.keys(settingDefinitions[sharedResource]).map((bindleEntry) => {
-                                                const settingDefinition = settingDefinitions[sharedResource][bindleEntry]
-                                                const isChecked = changedSettings[bindleEntry] || false;
+                                            Object.keys(settingDefinitions[clientName]).map((settingKey) => {
+                                                const settingDefinition = settingDefinitions[clientName][settingKey]
+                                                const isChecked = changedSettings[clientName]?.[settingKey] || false;
 
                                                 return (
-                                                    <div key={bindleEntry} className="flex border-1 p-2 rounded-md mt-2 items-center">
+                                                    <div key={settingKey} className="flex border-1 p-2 rounded-md mt-2 items-center">
                                                         <div className="flex flex-col text-sm flex-grow-1">
                                                             <p>{settingDefinition.friendlyName}</p>
                                                             <p className="text-muted-foreground text-sm">{settingDefinition.description}</p>
                                                         </div>
 
-                                                        <Switch checked={isChecked} onCheckedChange={() => toggleSetting(bindleEntry, isChecked)} />
+                                                        <Switch checked={isChecked} onCheckedChange={() => toggleSetting(clientName, settingKey, isChecked)} />
                                                     </div>
                                                 )
                                             })
@@ -826,6 +806,7 @@ const TeamSettingsDialog = (props: {
         </Dialog>
     )
 }
+
 
 const CustomPopoverFilterBox = (props: React.ComponentProps<"input"> & { isLoading?: boolean }) => {
     return (

@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, KeyRoundIcon, Link2Icon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -72,25 +72,31 @@ export const DashboardTeamInfo = () => {
     const navigate = useNavigate()
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
+    const [settingDefinitions, setSettingDefinitions] = React.useState<RootTeamSettingMap>({});
     const [addMembersOpen, setAddMembersOpen] = React.useState(false);
     const [subteamsOpen, setSubteamsOpen] = React.useState(false);
     const [teamSettingsOpen, setTeamSettingsOpen] = React.useState(false);
+    const [isSavingSettings, setIsSavingSettings] = React.useState(false);
 
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
+    const [syncDialogTitle, setSyncDialogTitle] = React.useState("");
+    const [syncDialogDescription, setSyncDialogDescription] = React.useState("");
     const [syncDialogProgress, setSyncDialogProgress] = React.useState(0);
     const [syncDialogStatus, setSyncDialogStatus] = React.useState("");
 
-    const [magicLinkDialogOpen, setMagicLinkDialogOpen] = React.useState(false);
-    const [magicLinkUrl, setMagicLinkUrl] = React.useState("");
+
 
     React.useEffect(() => {
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
-            .then(async (response) => {
-                const teamlistResponse: TeamInfoResponse = await response.json()
+        // Fetch team info and settings definitions in parallel
+        Promise.all([
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(r => r.json()),
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(r => r.json())
+        ])
+            .then(([teamlistResponse, definitions]) => {
                 setTeamInfo(teamlistResponse.team)
                 setSubTeams(teamlistResponse.subteams)
+                setSettingDefinitions(definitions)
             })
-
             .catch((e) => {
                 toast.error("Failed to Fetch Team Information: " + e.message)
             })
@@ -100,6 +106,8 @@ export const DashboardTeamInfo = () => {
         /* Reset State and Open Sync Dialog */
         setSyncDialogProgress(0)
         setSyncDialogStatus("Connecting to Server...")
+        setSyncDialogTitle("Syncing Shared Permissions")
+        setSyncDialogDescription("Please wait while the permissions propagate across Shared Resources")
         setSyncDialogOpen(true)
 
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/syncbindles`, {
@@ -132,6 +140,21 @@ export const DashboardTeamInfo = () => {
     }
 
     function saveTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }) {
+        setIsSavingSettings(true);
+
+        // Optimistically update local state
+        setTeamInfo(prevTeamInfo => {
+            if (!prevTeamInfo) return prevTeamInfo;
+            return {
+                ...prevTeamInfo,
+                attributes: {
+                    ...prevTeamInfo.attributes,
+                    rootTeamSettings: settings
+                }
+            };
+        });
+
+        // Save to server
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/updateconf`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -142,47 +165,51 @@ export const DashboardTeamInfo = () => {
             }
 
             toast.success("Team settings saved successfully!")
-
-            // Refresh team info to get latest settings
+            // Close the dialog on successful save
+            setTeamSettingsOpen(false);
+        }).catch(e => {
+            toast.error(`Failed to save settings: ${e.message}`)
+            // Revert optimistic update on error by refetching
             fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
                 .then(async (response) => {
                     const teamlistResponse: TeamInfoResponse = await response.json()
                     setTeamInfo(teamlistResponse.team)
                 })
-
-        }).catch(e => {
-            toast.error(`Failed to save settings: ${e.message}`)
+        }).finally(() => {
+            setIsSavingSettings(false);
         });
     }
 
     function generateAWSMagicLink() {
         setSyncDialogProgress(0)
         setSyncDialogStatus("Connecting to Server...")
+        setSyncDialogTitle("Preparing AWS Console Session")
+        setSyncDialogDescription("Please wait while a new AWS Console session is created. You'll be redirected automatically.")
         setSyncDialogOpen(true)
 
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/awsaccess`)
             .then(async response => {
-                if (!response.body) {
-                    console.error("no body")
-                    return
-                }
+                if (!response.body) return console.error("no body");
 
                 const reader = response.body.getReader();
-                let decoder = new TextDecoder();
+                const decoder = new TextDecoder();
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
                     const textChunk = decoder.decode(value, { stream: true });
-
-
-                    // Or simplified parsing if we assume well-formed or simple approach
-                    // Actually the standard way is to buffer, but for this simple case:
-                    // We'll try to parse the last valid JSON
+                    const updates: any[] = [];
 
                     try {
-                        const update = JSON.parse(textChunk);
+                        updates.push(JSON.parse(textChunk));
+                    } catch {
+                        (textChunk.match(/\{.*?\}/g) || []).forEach(m => {
+                            try { updates.push(JSON.parse(m)); } catch { }
+                        });
+                    }
+
+                    for (const update of updates) {
                         if (update.error) {
                             toast.error(update.status);
                             setSyncDialogOpen(false);
@@ -193,31 +220,8 @@ export const DashboardTeamInfo = () => {
                         setSyncDialogStatus(update.status);
 
                         if (update.link) {
-                            setMagicLinkUrl(update.link);
                             setSyncDialogOpen(false);
-                            setMagicLinkDialogOpen(true);
-                        }
-                    } catch (e) {
-                        // split by objects if stuck together
-                        const validJSONs = textChunk.match(/\{.*?\}/g);
-                        if (validJSONs) {
-                            validJSONs.forEach(jsonStr => {
-                                try {
-                                    const update = JSON.parse(jsonStr);
-                                    if (update.error) {
-                                        toast.error(update.status);
-                                        // Don't return here as loop continues, but maybe break?
-                                    } else {
-                                        setSyncDialogProgress(update.progressPercent);
-                                        setSyncDialogStatus(update.status);
-                                        if (update.link) {
-                                            setMagicLinkUrl(update.link);
-                                            setSyncDialogOpen(false);
-                                            setMagicLinkDialogOpen(true);
-                                        }
-                                    }
-                                } catch (e2) { }
-                            });
+                            window.open(update.link, "_blank");
                         }
                     }
                 }
@@ -230,10 +234,10 @@ export const DashboardTeamInfo = () => {
     return (
         <div className="flex flex-col m-2">
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
-            <ProgressUpdateDialog open={syncDialogOpen} title="Syncing Shared Permissions" description="Please wait while the permissions propagate across Shared Resources" status={syncDialogStatus} progressPercent={syncDialogProgress} />
+            <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
             <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} />
-            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} onSave={saveTeamSettings} />
-            <MagicLinkDialog open={magicLinkDialogOpen} openChanged={setMagicLinkDialogOpen} url={magicLinkUrl} />
+            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveTeamSettings} />
+
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
@@ -276,8 +280,8 @@ export const DashboardTeamInfo = () => {
                 <h3 className="text-lg">Team Resources</h3>
                 <div className="flex gap-2 mt-2">
                     <Button onClick={generateAWSMagicLink} variant="outline" className="cursor-pointer">
-                        <Link2Icon />
-                        Generate AWS Magic Link
+                        <ExternalLinkIcon />
+                        Open AWS Console
                     </Button>
                 </div>
             </div>
@@ -686,53 +690,34 @@ const TeamSettingsDialog = (props: {
     open: boolean,
     openChanged: (open: boolean) => void,
     teamInfo?: TeamInfo,
+    settingDefinitions: RootTeamSettingMap,
+    isSaving: boolean,
     onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void
 }) => {
-    const params = useParams()
-    const [settingDefinitions, setSettingDefinitions] = React.useState<RootTeamSettingMap>({})
     // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
     const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
-    const [isLoading, setIsLoading] = React.useState(false)
 
-    /* Fetch fresh team settings when dialog opens */
+    /* Initialize settings when dialog opens or teamInfo/settingDefinitions change */
     React.useEffect(() => {
-        if (!props.open) return;
+        if (!props.open || !props.teamInfo) return;
 
-        setIsLoading(true)
+        const rootTeamSettings = props.teamInfo.attributes.rootTeamSettings || {};
 
-        /* Fetch setting definitions and team info in parallel */
-        Promise.all([
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(r => r.json()),
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(r => r.json())
-        ])
-            .then(([definitions, teamResponse]) => {
-                setSettingDefinitions(definitions)
+        // Build the initial settings object with all defined settings
+        const initialSettings: { [clientName: string]: { [settingKey: string]: boolean } } = {};
 
-                /* Initialize changedSettings from fresh data, preserving the nested structure */
-                const rootTeamSettings = teamResponse.team.attributes.rootTeamSettings || {};
+        // Iterate through all defined settings and initialize them
+        for (const clientName in props.settingDefinitions) {
+            initialSettings[clientName] = {};
+            for (const settingKey in props.settingDefinitions[clientName]) {
+                // Get the value from existing settings, or default to false
+                const existingValue = rootTeamSettings[clientName]?.[settingKey];
+                initialSettings[clientName][settingKey] = existingValue ?? false;
+            }
+        }
 
-                // Build the initial settings object with all defined settings
-                const initialSettings: { [clientName: string]: { [settingKey: string]: boolean } } = {};
-
-                // Iterate through all defined settings and initialize them
-                for (const clientName in definitions) {
-                    initialSettings[clientName] = {};
-                    for (const settingKey in definitions[clientName]) {
-                        // Get the value from existing settings, or default to false
-                        const existingValue = rootTeamSettings[clientName]?.[settingKey];
-                        initialSettings[clientName][settingKey] = existingValue ?? false;
-                    }
-                }
-
-                setChangedSettings(initialSettings);
-            })
-            .catch((e) => {
-                toast.error("Failed to fetch settings: " + e.message)
-            })
-            .finally(() => {
-                setIsLoading(false)
-            })
-    }, [props.open, params.teamId]);
+        setChangedSettings(initialSettings);
+    }, [props.open, props.teamInfo, props.settingDefinitions]);
 
 
     function normalizeClientName(clientName: string) {
@@ -761,45 +746,41 @@ const TeamSettingsDialog = (props: {
                     <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
 
-                    {isLoading ? (
-                        <div className="flex flex-col items-center justify-center mt-8 gap-3">
-                            <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
-                            <p className="text-muted-foreground">Loading settings...</p>
-                        </div>
-                    ) : (
-                        <div className="flex flex-col mt-2">
-                            {
-                                Object.keys(settingDefinitions).map((clientName) => (
-                                    <div key={clientName} className="flex flex-col mt-2">
-                                        <p className="text-muted-foreground text-sm">{normalizeClientName(clientName)}</p>
-                                        {
-                                            Object.keys(settingDefinitions[clientName]).map((settingKey) => {
-                                                const settingDefinition = settingDefinitions[clientName][settingKey]
-                                                const isChecked = changedSettings[clientName]?.[settingKey] || false;
+                    <div className="flex flex-col mt-2">
+                        {
+                            Object.keys(props.settingDefinitions).map((clientName) => (
+                                <div key={clientName} className="flex flex-col mt-2">
+                                    <p className="text-muted-foreground text-sm">{normalizeClientName(clientName)}</p>
+                                    {
+                                        Object.keys(props.settingDefinitions[clientName]).map((settingKey) => {
+                                            const settingDefinition = props.settingDefinitions[clientName][settingKey]
+                                            const isChecked = changedSettings[clientName]?.[settingKey] || false;
 
-                                                return (
-                                                    <div key={settingKey} className="flex border-1 p-2 rounded-md mt-2 items-center">
-                                                        <div className="flex flex-col text-sm flex-grow-1">
-                                                            <p>{settingDefinition.friendlyName}</p>
-                                                            <p className="text-muted-foreground text-sm">{settingDefinition.description}</p>
-                                                        </div>
-
-                                                        <Switch checked={isChecked} onCheckedChange={() => toggleSetting(clientName, settingKey, isChecked)} />
+                                            return (
+                                                <div key={settingKey} className="flex border-1 p-2 rounded-md mt-2 items-center">
+                                                    <div className="flex flex-col text-sm flex-grow-1">
+                                                        <p>{settingDefinition.friendlyName}</p>
+                                                        <p className="text-muted-foreground text-sm">{settingDefinition.description}</p>
                                                     </div>
-                                                )
-                                            })
 
-                                        }
-                                    </div>
-                                ))
-                            }
-                        </div>
-                    )}
+                                                    <Switch checked={isChecked} onCheckedChange={() => toggleSetting(clientName, settingKey, isChecked)} />
+                                                </div>
+                                            )
+                                        })
+
+                                    }
+                                </div>
+                            ))
+                        }
+                    </div>
                     <DialogFooter className="absolute bottom-4 right-4 flex gap-2">
                         <DialogClose asChild>
                             <Button variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button disabled={isLoading} onClick={() => props.onSave(changedSettings)}>Save Changes</Button>
+                        <Button disabled={props.isSaving} onClick={() => props.onSave(changedSettings)}>
+                            <Loader2Icon className={cn("animate-spin", !props.isSaving ? "hidden" : "")} />
+                            Save Changes
+                        </Button>
                     </DialogFooter>
                 </div>
             </DialogContent>
@@ -823,49 +804,5 @@ const CustomPopoverFilterBox = (props: React.ComponentProps<"input"> & { isLoadi
 
             <Loader2Icon className={`animate-spin ${(!props.isLoading) ? "invisible" : ""}`} />
         </div>
-    )
-}
-
-const MagicLinkDialog = (props: { open: boolean, openChanged: (open: boolean) => void, url: string }) => {
-    return (
-        <Dialog open={props.open} onOpenChange={props.openChanged}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>AWS Magic Link Generated</DialogTitle>
-                    <DialogDescription>
-                        Use this link to access the AWS Console. This link will expire in 1 hour.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="flex items-center space-x-2">
-                    <div className="grid flex-1 gap-2">
-                        <Label htmlFor="link" className="sr-only">
-                            Link
-                        </Label>
-                        <Input
-                            id="link"
-                            defaultValue={props.url}
-                            readOnly
-                        />
-                    </div>
-                    <Button type="submit" size="sm" className="px-3" onClick={() => {
-                        navigator.clipboard.writeText(props.url)
-                        toast.success("Copied to clipboard!")
-                    }}>
-                        <span className="sr-only">Copy</span>
-                        <Link2Icon className="h-4 w-4" />
-                    </Button>
-                </div>
-                <DialogFooter className="sm:justify-start">
-                    <DialogClose asChild>
-                        <Button type="button" variant="secondary">
-                            Close
-                        </Button>
-                    </DialogClose>
-                    <Button type="button" onClick={() => window.open(props.url, "_blank")}>
-                        Open Console
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     )
 }

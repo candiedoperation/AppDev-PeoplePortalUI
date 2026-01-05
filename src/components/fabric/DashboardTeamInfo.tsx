@@ -592,25 +592,39 @@ const SubteamsInfoDialog = (props: {
 }) => {
     const [currentSubTeam, setCurrentSubTeam] = React.useState<TeamInfo>()
     const [bindleDefinitions, setBindleDefinitions] = React.useState<BindleDefinitionMap>({})
+    const [enabledBindles, setEnabledBindles] = React.useState<{ [key: string]: { [key: string]: boolean } }>({})
+    const [isLoadingBindles, setIsLoadingBindles] = React.useState(false);
+    const [isSaving, setIsSaving] = React.useState(false);
+
+    const sortedSubteams = React.useMemo(() => {
+        return [...props.subteams].sort((a, b) => a.attributes.friendlyName.localeCompare(b.attributes.friendlyName))
+    }, [props.subteams])
 
     React.useEffect(() => {
         if (props.open)
-            setCurrentSubTeam(_ => props.subteams[0])
-    }, [props.open])
+            setCurrentSubTeam(_ => sortedSubteams[0])
+    }, [props.open, sortedSubteams])
+
+    React.useEffect(() => {
+        if (!currentSubTeam) return;
+
+        setIsLoadingBindles(true)
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}/bindles`)
+            .then(async (response) => {
+                const fetchedBindles = await response.json()
+                setEnabledBindles(fetchedBindles)
+            })
+            .catch((e) => {
+                toast.error("Failed to Fetch Team Bindles: " + e.message)
+            })
+            .finally(() => { setIsLoadingBindles(false) })
+    }, [currentSubTeam])
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/bindles/definitions`)
             .then(async (response) => {
                 const fetchedBindleDefinitions = await response.json()
-                setBindleDefinitions(_ => ({
-                    ...fetchedBindleDefinitions,
-                    "SlackClient": {
-                        "slack:abbc": {
-                            friendlyName: "Enable Ass",
-                            description: "Enables ur Ass"
-                        }
-                    }
-                }))
+                setBindleDefinitions(_ => (fetchedBindleDefinitions))
             })
             .catch((e) => {
                 toast.error("Failed to Bindle Permissions: " + e.message)
@@ -624,7 +638,34 @@ const SubteamsInfoDialog = (props: {
 
             case "SlackClient":
                 return "Slack Permissions"
+
+            case "AppleAccountClient":
+                return "Apple Account"
+
+            default:
+                return clientName
         }
+    }
+
+    function updateSubTeamBindles() {
+        if (!currentSubTeam) return
+
+        setIsSaving(true)
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}/bindles`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(enabledBindles)
+        }).then(async response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`)
+            }
+
+            toast.success(`Bindles updated for ${currentSubTeam.attributes.friendlyName}!`)
+        }).catch(e => {
+            toast.error(`Failed to update bindles: ${e.message}`)
+        }).finally(() => {
+            setIsSaving(false);
+        });
     }
 
     return (
@@ -635,7 +676,7 @@ const SubteamsInfoDialog = (props: {
                         <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
-                                {props.subteams.map((subteam) => (
+                                {sortedSubteams.map((subteam) => (
                                     <SidebarMenuItem key={subteam.pk}>
                                         <SidebarMenuButton className="cursor-pointer" onClick={() => { setCurrentSubTeam(_ => subteam) }} isActive={currentSubTeam?.pk == subteam.pk} asChild>
                                             <a>
@@ -651,14 +692,21 @@ const SubteamsInfoDialog = (props: {
 
                     <Separator orientation="vertical" />
                     <div className="flex-grow-1 m-4">
-                        <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
+                            {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
+                        </div>
                         <h3 className="text-muted-foreground">{currentSubTeam?.attributes.description}</h3>
 
                         <div className="flex flex-col mt-2">
                             {
                                 Object.keys(bindleDefinitions).map((sharedResource) => (
                                     <div className="flex flex-col mt-2">
-                                        <p className="text-muted-foreground text-sm">{normalizeClientName(sharedResource)}</p>
+                                        {
+                                            Object.keys(bindleDefinitions[sharedResource]).length < 1 ? <></> :
+                                                <p className="text-muted-foreground text-sm">{normalizeClientName(sharedResource)}</p>
+                                        }
+
                                         {
                                             Object.keys(bindleDefinitions[sharedResource]).map((bindleEntry) => {
                                                 const bindleDefinition = bindleDefinitions[sharedResource][bindleEntry]
@@ -670,7 +718,18 @@ const SubteamsInfoDialog = (props: {
                                                             <p className="text-muted-foreground text-sm">{bindleDefinition.description}</p>
                                                         </div>
 
-                                                        <Switch />
+                                                        <Switch
+                                                            checked={enabledBindles[sharedResource]?.[bindleEntry] === true}
+                                                            onCheckedChange={(checked) => {
+                                                                setEnabledBindles(prev => ({
+                                                                    ...prev,
+                                                                    [sharedResource]: {
+                                                                        ...prev[sharedResource],
+                                                                        [bindleEntry]: checked
+                                                                    }
+                                                                }))
+                                                            }}
+                                                        />
                                                     </div>
                                                 )
                                             })
@@ -679,6 +738,16 @@ const SubteamsInfoDialog = (props: {
                                 ))
                             }
                         </div>
+
+                        <DialogFooter className="absolute bottom-4 right-4 flex gap-2">
+                            <DialogClose asChild>
+                                <Button variant="outline">Cancel</Button>
+                            </DialogClose>
+                            <Button disabled={isSaving} onClick={updateSubTeamBindles}>
+                                <Loader2Icon className={cn("animate-spin", !isSaving ? "hidden" : "")} />
+                                Save Changes for {currentSubTeam?.attributes.friendlyName}
+                            </Button>
+                        </DialogFooter>
                     </div>
                 </div>
             </DialogContent>

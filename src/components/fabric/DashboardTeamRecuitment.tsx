@@ -14,11 +14,9 @@ import { Loader2Icon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 
 const KANBAN_COLUMNS = [
-    { id: "applied", name: "Applied" },
-    { id: "screening", name: "Screening" },
-    { id: "interviewing", name: "Interviewing" },
-    { id: "offered", name: "Offer Sent" },
+    { id: "applied", name: "New Applicants" },
     { id: "accepted", name: "Accepted" },
+    { id: "interviewing", name: "Interviewing" },
     { id: "rejected", name: "Rejected" },
 ]
 
@@ -133,6 +131,7 @@ export const DashboardTeamRecruitment = () => {
             <Tabs className="mt-5 flex flex-col flex-grow" defaultValue="applications">
                 <TabsList>
                     <TabsTrigger value="applications">Applications</TabsTrigger>
+                    <TabsTrigger value="statistics">Statistics</TabsTrigger>
                     <TabsTrigger value="settings">Recruitment Settings</TabsTrigger>
                 </TabsList>
 
@@ -145,7 +144,7 @@ export const DashboardTeamRecruitment = () => {
                             className="overflow-x-auto flex h-full"
                         >
                             {(/* column */ col) => (
-                                <KanbanBoard id={col.id} className="min-w-[250px]">
+                                <KanbanBoard id={col.id} className="min-w-[250px] ring-inset">
                                     <KanbanHeader>{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
                                     <KanbanCards id={col.id}>
                                         {(item) => (

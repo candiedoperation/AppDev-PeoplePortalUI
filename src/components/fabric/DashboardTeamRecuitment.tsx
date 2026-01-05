@@ -11,6 +11,16 @@ import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Loader2Icon } from "lucide-react";
+import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
+
+const KANBAN_COLUMNS = [
+    { id: "applied", name: "Applied" },
+    { id: "screening", name: "Screening" },
+    { id: "interviewing", name: "Interviewing" },
+    { id: "offered", name: "Offer Sent" },
+    { id: "accepted", name: "Accepted" },
+    { id: "rejected", name: "Rejected" },
+]
 
 interface SubteamATSConfig {
     roles: string[]
@@ -29,6 +39,13 @@ export const DashboardTeamRecruitment = () => {
     const [isLoading, setIsLoading] = React.useState(false);
     const [recruitmentEnabled, setRecruitmentEnabled] = React.useState<{ [key: string]: boolean }>({})
     const [roleSpecQuestions, setRoleSpecQuestions] = React.useState<{ [key: string]: { [key: string]: string[] } }>({})
+
+    /* Temporary Dummy Data */
+    const [applications, setApplications] = React.useState<any[]>([
+        { id: "1", name: "John Doe", column: "applied", role: "Software Engineer" },
+        { id: "2", name: "Jane Smith", column: "screening", role: "Product Manager" },
+        { id: "3", name: "Alice Johnson", column: "interviewing", role: "Designer" },
+    ])
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
@@ -105,7 +122,7 @@ export const DashboardTeamRecruitment = () => {
     }
 
     return (
-        <div className="flex flex-col m-2">
+        <div className="flex flex-col m-2 h-full">
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
                     <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">Recruitment Tracker</h1>
@@ -113,15 +130,36 @@ export const DashboardTeamRecruitment = () => {
                 </div>
             </div>
 
-            <Tabs className="mt-5" defaultValue="applications">
+            <Tabs className="mt-5 flex flex-col flex-grow" defaultValue="applications">
                 <TabsList>
                     <TabsTrigger value="applications">Applications</TabsTrigger>
                     <TabsTrigger value="settings">Recruitment Settings</TabsTrigger>
                 </TabsList>
 
-                <div className="mt-2">
-                    <TabsContent value="applications">
-
+                <div className="mt-2 flex-grow flex flex-col min-h-0">
+                    <TabsContent className="flex flex-col flex-grow h-full" value="applications">
+                        <KanbanProvider
+                            columns={KANBAN_COLUMNS}
+                            data={applications}
+                            onDataChange={(data) => setApplications(data)}
+                            className="overflow-x-auto flex h-full"
+                        >
+                            {(/* column */ col) => (
+                                <KanbanBoard id={col.id} className="min-w-[250px]">
+                                    <KanbanHeader>{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
+                                    <KanbanCards id={col.id}>
+                                        {(item) => (
+                                            <KanbanCard id={item.id} name={item.name} column={item.column} className="bg-background cursor-grab border-border">
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="font-semibold">{item.name}</span>
+                                                    <span className="text-xs text-muted-foreground">{item.role as string}</span>
+                                                </div>
+                                            </KanbanCard>
+                                        )}
+                                    </KanbanCards>
+                                </KanbanBoard>
+                            )}
+                        </KanbanProvider>
                     </TabsContent>
 
                     <TabsContent value="settings">
@@ -182,14 +220,14 @@ export const DashboardTeamRecruitment = () => {
                                                             roles[subteam.pk].map((role) => (
                                                                 <div className="flex flex-col gap-2 mt-2 mb-2">
                                                                     <Label>Question for {role.text} Applicants</Label>
-                                                                    <Input 
-                                                                        value={roleSpecQuestions[subteam.pk][role.text]?.at(0) ?? ""} 
+                                                                    <Input
+                                                                        value={roleSpecQuestions[subteam.pk][role.text]?.at(0) ?? ""}
                                                                         onChange={(e) => {
                                                                             setRoleSpecQuestions(questions => ({
                                                                                 ...questions,
-                                                                                [subteam.pk]: { 
+                                                                                [subteam.pk]: {
                                                                                     ...questions[subteam.pk],
-                                                                                    [role.text]: [e.target.value] 
+                                                                                    [role.text]: [e.target.value]
                                                                                 }
                                                                             }))
                                                                         }}

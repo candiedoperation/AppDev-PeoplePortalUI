@@ -12,6 +12,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Loader2Icon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 
 const KANBAN_COLUMNS = [
     { id: "applied", name: "New Applicants" },
@@ -38,12 +39,27 @@ export const DashboardTeamRecruitment = () => {
     const [recruitmentEnabled, setRecruitmentEnabled] = React.useState<{ [key: string]: boolean }>({})
     const [roleSpecQuestions, setRoleSpecQuestions] = React.useState<{ [key: string]: { [key: string]: string[] } }>({})
 
-    /* Temporary Dummy Data */
-    const [applications, setApplications] = React.useState<any[]>([
-        { id: "1", name: "John Doe", column: "applied", role: "Software Engineer" },
-        { id: "2", name: "Jane Smith", column: "screening", role: "Product Manager" },
-        { id: "3", name: "Alice Johnson", column: "interviewing", role: "Designer" },
-    ])
+    const [applications, setApplications] = React.useState<any[]>([])
+    const [selectedApplication, setSelectedApplication] = React.useState<any | null>(null)
+
+    // Fetch applications from MongoDB
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}`) // must fix
+            .then(async (response) => {
+                const data = await response.json();
+                if (response.ok) {
+                    // Ensure data is an array (empty array is valid)
+                    setApplications(Array.isArray(data) ? data : []);
+                } else {
+                    console.error("Server error:", data);
+                    toast.error("Failed to Fetch Applications: " + (data.message || "Server Error"));
+                }
+            })
+            .catch((e) => {
+                console.error("Fetch error:", e);
+                toast.error("Failed to Fetch Applications: Error " + e.message);
+            });
+    }, [params.teamId]);
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
@@ -79,7 +95,7 @@ export const DashboardTeamRecruitment = () => {
             .catch((e) => {
                 toast.error("Failed to Fetch Team Information: " + e.message)
             })
-    }, []);
+    }, [params.teamId]);
 
     function handleSettingsUpdate(subteamPk: string) {
         setIsLoading(true);
@@ -149,9 +165,12 @@ export const DashboardTeamRecruitment = () => {
                                     <KanbanCards id={col.id}>
                                         {(item) => (
                                             <KanbanCard id={item.id} name={item.name} column={item.column} className="bg-background cursor-grab border-border">
-                                                <div className="flex flex-col gap-1">
-                                                    <span className="font-semibold">{item.name}</span>
-                                                    <span className="text-xs text-muted-foreground">{item.role as string}</span>
+                                                <div className="flex items-center justify-between w-full">
+                                                    <div className="flex flex-col gap-1">
+                                                        <span className="font-semibold">{item.name}</span>
+                                                        <span className="text-xs text-muted-foreground">{item.role as string}</span>
+                                                    </div>
+                                                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedApplication(item); }}>Open</Button>
                                                 </div>
                                             </KanbanCard>
                                         )}
@@ -250,6 +269,46 @@ export const DashboardTeamRecruitment = () => {
                     </TabsContent>
                 </div>
             </Tabs>
+
+            {/* Application Details Modal */}
+            <Dialog open={selectedApplication !== null} onOpenChange={(open) => !open && setSelectedApplication(null)}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>{selectedApplication?.name}</DialogTitle>
+                        <DialogDescription>Application Details</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-4 mt-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <Label className="text-muted-foreground">Role</Label>
+                                <p className="font-medium">{selectedApplication?.role}</p>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Stage</Label>
+                                <p className="font-medium capitalize">{selectedApplication?.column}</p>
+                            </div>
+                            <div>
+                                <Label className="text-muted-foreground">Applied At</Label>
+                                <p className="font-medium">{selectedApplication?.appliedAt ? new Date(selectedApplication.appliedAt).toLocaleDateString() : 'N/A'}</p>
+                            </div>
+                        </div>
+
+                        {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
+                            <div className="mt-2">
+                                <Label className="text-muted-foreground">Responses</Label>
+                                <div className="mt-2 space-y-3">
+                                    {Object.entries(selectedApplication.responses).map(([question, answer]) => (
+                                        <div key={question} className="bg-muted p-3 rounded-lg">
+                                            <p className="text-sm font-medium">{question}</p>
+                                            <p className="text-sm text-muted-foreground mt-1">{answer as string}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

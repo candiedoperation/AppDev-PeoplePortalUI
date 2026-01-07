@@ -118,15 +118,24 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
 
   return (
     <>
-      <div style={style} {...listeners} {...attributes} ref={setNodeRef}>
+      <div style={style} ref={setNodeRef} {...attributes}>
         <Card
           className={cn(
-            'cursor-grab gap-4 rounded-md p-3 shadow-sm',
-            isDragging && 'pointer-events-none cursor-grabbing opacity-30',
+            'gap-4 rounded-md p-3 shadow-sm relative',
+            isDragging && 'opacity-30',
             className
           )}
         >
-          {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
+          {/* Drag handle overlay - covers the card but allows pointer events to pass through to children */}
+          <div
+            {...listeners}
+            className="absolute inset-0 cursor-grab z-0"
+            style={{ pointerEvents: 'auto' }}
+          />
+          {/* Content with higher z-index for interactivity */}
+          <div className="relative z-10 pointer-events-auto">
+            {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
+          </div>
         </Card>
       </div>
       {activeCardId === id && (

@@ -61,6 +61,30 @@ interface OpenATSTeam {
     subteamInfo: { [key: string]: OpenATSTeamInfo }
 }
 
+interface ApplicantProfile {
+    graduationYear?: number
+    major?: string
+    phone?: string
+    resumeUrl?: string
+    linkedinUrl?: string
+    githubUrl?: string
+}
+
+interface PersonalInfoField {
+    id: keyof ApplicantProfile
+    label: string;
+    placeholder?: string;
+    type?: string
+}
+
+const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
+    { id: "graduationYear", label: "Graduation Year", type: "number" },
+    { id: "major", label: "Major" },
+    { id: "phone", label: "Phone Number" },
+    { id: "resumeUrl", label: "Resume URL" },
+    { id: "linkedinUrl", label: "LinkedIn URL" },
+    { id: "githubUrl", label: "GitHub URL" }
+]
 export const ATSDashboard = () => {
     const params = useParams()
     const location = useLocation()
@@ -89,19 +113,59 @@ const ATSApplyPage = () => {
     const params = useParams()
     const [subteam, setSubteam] = React.useState<ATSSubTeamDesc>()
 
-    const [verificationComplete, setVerificationComplete] = React.useState(false);
+    const [selectedRoles, setSelectedRoles] = React.useState<string[]>([])
+
+    const [verificationComplete, setVerificationComplete] = React.useState(false)
+    const [profile, setProfile] = React.useState<ApplicantProfile>({})
+    const [responses, setResponses] = React.useState<{ [question: string]: string }>({})
+
+    const [isSubmitting, setIsSubmitting] = React.useState(false)
 
     React.useEffect(() => {
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/config/${params.subteamId}`)
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/config/${params.subteamId}`, { credentials: 'include' })
             .then(async (res) => {
                 const team = await res.json()
                 setSubteam(_ => team)
             })
-    }, [])
+    }, [params.subteamId])
+
+    const handleApply = async () => {
+        if (selectedRoles.length === 0) {
+            return toast.error("Please select at least one role.")
+        }
+
+        setIsSubmitting(true)
+
+        try {
+            const response = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/apply`, {
+                method: "POST",
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    subteamPk: params.subteamId,
+                    roles: selectedRoles,
+                    profile: profile,
+                    responses: responses,
+                })
+            })
+
+            if (response.ok) {
+                toast.success("Application submitted successfully!")
+                navigate("/apply") // Send them back to the list
+            } else {
+                const err = await response.json()
+                toast.error("Submission failed", { description: err.error })
+            }
+        } catch (error) {
+            toast.error("An error occurred while submitting.")
+        } finally {
+            setIsSubmitting(false)
+        }
+    }
 
     return (
         <div className='flex flex-col m-3'>
-            <AccountLoginAndVerifyDialog />
+            <AccountLoginAndVerifyDialog onSuccess={(p) => setProfile(prev => ({ ...prev, ...p }))} />
             <Button className='max-w-max' onClick={() => navigate("../")} variant="outline">
                 <ChevronLeftIcon />
                 Back to Open Roles
@@ -117,7 +181,14 @@ const ATSApplyPage = () => {
             <div className="flex flex-col items-start gap-3 mt-2 ml-2">
                 {subteam?.roles.map((role) => (
                     <div className='flex gap-2'>
-                        <Checkbox id={role} />
+                        <Checkbox
+                            id={role}
+                            checked={selectedRoles.includes(role)}
+                            onCheckedChange={(checked) => {
+                                if (checked) setSelectedRoles(prev => [...prev, role])
+                                else setSelectedRoles(prev => prev.filter(r => r !== role))
+                            }}
+                        />
                         <div className="grid gap-2">
                             <Label htmlFor={role}>{role}</Label>
                             <p className="text-muted-foreground text-sm">
@@ -129,6 +200,64 @@ const ATSApplyPage = () => {
             </div>
 
             <h3 className='text-muted-foreground text-xl mt-3'>Personal Information</h3>
+            {PERSONAL_INFO_FIELDS.map((field) => (
+                <div key={field.id} className="grid w-full items-center gap-1.5 mt-4">
+                    <Label htmlFor={field.id}>{field.label}</Label>
+
+                    <Input
+                        id={field.id}
+                        type={field.type ?? "text"}
+                        placeholder={field.placeholder ?? "Enter your answer"}
+                        value={profile[field.id] ?? ""}
+                        onChange={(e) =>
+                            setProfile((prev) => ({
+                                ...prev,
+                                [field.id]:
+                                    field.type === "number"
+                                        ? Number(e.target.value)
+                                        : e.target.value
+                            }))
+                        }
+                    />
+                </div>
+            ))}
+
+            <h3 className='text-muted-foreground text-xl mt-3'>Role Specific Questions</h3>
+            {selectedRoles.length > 0 && Object.entries(subteam?.roleSpecificQuestions ?? {}).filter(
+                ([role]) => selectedRoles.includes(role)
+            ).map(([role, questions]) => (
+                <div key={role} className="mt-5">
+                    <h3 className='text-muted-foreground text-xl'>{role} Questions</h3>
+                    {questions.map((question, idx) => (
+                        <div key={`${role}-${idx}`} className="grid w-full items-center gap-1.5 mt-4">
+                            <Label htmlFor={`${role}-${idx}`}>{question}</Label>
+                            <Input
+                                id={`${role}-${idx}`}
+                                type="text"
+                                placeholder="Enter your answer"
+                                value={responses[question] ?? ""}
+                                onChange={(e) =>
+                                    setResponses((prev) => ({
+                                        ...prev,
+                                        [question]: e.target.value
+                                    }))
+                                }
+                            />
+                        </div>
+                    ))}
+                </div>
+            ))}
+
+            <Button
+                onClick={handleApply}
+                disabled={isSubmitting}
+                className="mt-8 w-full md:w-max px-10"
+            >
+                {isSubmitting && <Loader2Icon className="animate-spin mr-2" />}
+                Submit Application
+            </Button>
+
+
         </div>
     )
 }
@@ -202,7 +331,7 @@ const ATSApplyList = () => {
     )
 }
 
-const AccountLoginAndVerifyDialog = () => {
+const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (profile: ApplicantProfile) => void }) => {
     const [isLoading, setIsLoading] = React.useState(false)
     const [schoolEmail, setSchoolEmail] = React.useState("")
     const [fullName, setFullName] = React.useState("")
@@ -252,6 +381,8 @@ const AccountLoginAndVerifyDialog = () => {
         })
             .then(async (res) => {
                 if (res.ok) {
+                    const data = await res.json()
+                    onSuccess(data.profile || {})
                     setOpen(false)
                 }
 

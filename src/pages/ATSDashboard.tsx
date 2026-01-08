@@ -23,7 +23,7 @@ import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config'
 import { Accordion } from '@/components/ui/accordion'
 import { AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { ChevronLeftIcon, ExternalLinkIcon, Loader2Icon, UsersRound } from 'lucide-react'
+import { CheckCircle2, ChevronLeftIcon, ExternalLinkIcon, FileIcon, Loader2Icon, UploadCloud, UsersRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -62,13 +62,13 @@ interface OpenATSTeam {
 }
 
 interface ApplicantProfile {
-    graduationYear?: number
-    major?: string
-    phone?: string
     resumeUrl?: string
     linkedinUrl?: string
     githubUrl?: string
+    whyAppDev?: string
+    additionalInfo?: string
 }
+
 
 interface PersonalInfoField {
     id: keyof ApplicantProfile
@@ -78,37 +78,185 @@ interface PersonalInfoField {
 }
 
 const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
-    { id: "graduationYear", label: "Graduation Year", type: "number" },
-    { id: "major", label: "Major" },
-    { id: "phone", label: "Phone Number" },
-    { id: "resumeUrl", label: "Resume URL" },
+    { id: "resumeUrl", label: "Resume (PDF)" },
     { id: "linkedinUrl", label: "LinkedIn URL" },
-    { id: "githubUrl", label: "GitHub URL" }
+    { id: "githubUrl", label: "GitHub URL" },
+    { id: "whyAppDev", label: "Explain what you'd like to get out of App Dev Club (200 words or less)." },
+    { id: "additionalInfo", label: "Is there anything else you'd like to mention?" }
 ]
+interface ATSApplication {
+    _id: string;
+    subteamPk: string;
+    subteamName?: string;
+    parentTeamName?: string;
+    roles: string[];
+    stage: string;
+    appliedAt: string;
+    responses: { [key: string]: string };
+}
+
+interface OTPSessionResponse {
+    name: string;
+    email: string;
+    profile: ApplicantProfile;
+    applications: ATSApplication[];
+}
+
 export const ATSDashboard = () => {
     const params = useParams()
     const location = useLocation()
     const navigate = useNavigate()
+    const [fullName, setFullName] = React.useState("")
+    const [email, setEmail] = React.useState("")
+    const [profile, setProfile] = React.useState<ApplicantProfile>({})
+    const [applications, setApplications] = React.useState<ATSApplication[]>([])
 
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/verifyotpsession`, {
+            method: "GET",
+            credentials: 'include'
+        })
+            .then(async (res) => {
+                if (res.ok) {
+                    const data: OTPSessionResponse = await res.json()
+                    setFullName(data.name)
+                    setEmail(data.email)
+                    setProfile(data.profile || {})
+                    setApplications(data.applications)
+                }
+            })
+            .catch(() => {
+            })
+    }, [location])
     return (
         <div className="flex flex-col w-full h-full">
             { /* Minimal, Special Header for Onboarding Page */}
             <header className="flex w-full h-14 shrink-0 items-center gap-2 border-b px-4">
-                <img className='h-8' src={logo} />
+                <img className="h-8" src={logo} />
                 <h1>Recruitment</h1>
+
+                {/* Right-aligned group */}
+                <div className="ml-auto flex items-center gap-4">
+                    {fullName && <Button
+                        onClick={() => navigate('/apply/applications')}
+                        variant="secondary"
+                    >
+                        My Applications
+                    </Button>}
+
+                    <div className="flex flex-col items-end">
+                        {fullName && <span className="text-sm font-medium">{fullName}</span>}
+                        {email && <span className="text-xs text-white-500">{email}</span>}
+                    </div>
+                </div>
             </header>
 
             <div style={{ height: "calc(100% - calc(var(--spacing) * 12))" }} className='flex flex-col w-full p-4 gap-3'>
                 <Routes>
-                    <Route path="/" element={<ATSApplyList />} />
-                    <Route path='/:subteamId' element={<ATSApplyPage />} />
+                    <Route path="/" element={<ATSApplyList applications={applications} />} />
+                    <Route path='/:subteamId' element={<ATSApplyPage applications={applications} />} />
+                    <Route path='/applications' element={<ATSApplicationsList applications={applications} profile={profile} fullName={fullName} email={email} />} />
                 </Routes>
             </div>
         </div>
     )
 }
 
-const ATSApplyPage = () => {
+export const ATSApplicationsList = ({ applications, profile, fullName, email }: { applications: ATSApplication[], profile: ApplicantProfile, fullName: string, email: string }) => {
+    const navigate = useNavigate()
+
+    return (
+        <div className="flex flex-col gap-6">
+
+            <Button className='max-w-max' onClick={() => navigate("../")} variant="outline">
+                <ChevronLeftIcon />
+                Back to Open Roles
+            </Button>
+
+            <div className="bg-muted/50 rounded-xl p-6 border">
+                <h1 className='text-3xl font-extrabold mb-4'>Your Profile</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <Label className="text-muted-foreground">Full Name</Label>
+                        <p className="font-medium">{fullName}</p>
+                    </div>
+                    <div>
+                        <Label className="text-muted-foreground">Email</Label>
+                        <p className="font-medium">{email}</p>
+                    </div>
+                    {PERSONAL_INFO_FIELDS.map(field => (
+                        <div key={field.id} className="md:col-span-2">
+                            <Label className="text-muted-foreground">{field.label}</Label>
+                            {profile[field.id]?.toString().startsWith("http") ? (
+                                <a
+                                    href={profile[field.id]}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block font-medium text-blue-500 hover:underline truncate"
+                                >
+                                    {profile[field.id]}
+                                </a>
+                            ) : (
+                                <p className="font-medium whitespace-pre-wrap">{profile[field.id] || "No response provided"}</p>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <h1 className='text-4xl font-extrabold mt-4'>Your Applications</h1>
+            {applications.length === 0 ? (
+                <p className="text-muted-foreground text-lg mt-4">You haven't submitted any applications yet.</p>
+            ) : (
+                <div className="grid gap-4">
+                    {applications.map((app) => (
+                        <div key={app._id} className="border rounded-lg p-6 flex flex-col gap-4 bg-card">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="text-2xl font-bold">
+                                        {app.parentTeamName ? `${app.parentTeamName} - ` : ""}
+                                        {app.subteamName || app.subteamPk} Subteam
+                                    </h3>
+                                    <div className="flex gap-2 mt-2">
+                                        {app.roles.map((role) => (
+                                            <Badge key={role} variant="secondary" className="text-sm">{role}</Badge>
+                                        ))}
+                                    </div>
+                                </div>
+                                <Badge className="px-3 py-1 text-sm">{app.stage}</Badge>
+                            </div>
+
+                            {app.responses && Object.keys(app.responses).length > 0 && (
+                                <div className="mt-2 border-t pt-4">
+                                    <h4 className="font-semibold mb-3 text-muted-foreground">Form Responses</h4>
+                                    <div className="grid gap-4 text-sm">
+                                        {Object.entries(app.responses).map(([question, answer]) => (
+                                            <div key={question} className="bg-muted/30 p-3 rounded-md">
+                                                <p className="font-medium text-muted-foreground mb-1">{question}</p>
+                                                <p className="whitespace-pre-wrap">{answer}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="text-xs text-muted-foreground border-t pt-4">
+                                Applied on {new Date(app.appliedAt).toLocaleDateString(undefined, {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                })}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    )
+}
+
+
+const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
     const navigate = useNavigate()
     const params = useParams()
     const [subteam, setSubteam] = React.useState<ATSSubTeamDesc>()
@@ -120,14 +268,24 @@ const ATSApplyPage = () => {
     const [responses, setResponses] = React.useState<{ [question: string]: string }>({})
 
     const [isSubmitting, setIsSubmitting] = React.useState(false)
+    const [isUploading, setIsUploading] = React.useState(false)
 
     React.useEffect(() => {
+        if (applications.some(app => app.subteamPk === params.subteamId)) {
+            toast.error("You've already applied to this subteam.")
+            navigate("/apply")
+            return
+        }
+
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/config/${params.subteamId}`, { credentials: 'include' })
             .then(async (res) => {
                 const team = await res.json()
-                setSubteam(_ => team)
+                setSubteam(team)
+                if (team.roles?.length === 1) {
+                    setSelectedRoles([team.roles[0]])
+                }
             })
-    }, [params.subteamId])
+    }, [params.subteamId, applications, navigate])
 
     const handleApply = async () => {
         if (selectedRoles.length === 0) {
@@ -137,7 +295,7 @@ const ATSApplyPage = () => {
         setIsSubmitting(true)
 
         try {
-            const response = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/apply`, {
+            const response = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/apply`, {
                 method: "POST",
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -160,6 +318,47 @@ const ATSApplyPage = () => {
             toast.error("An error occurred while submitting.")
         } finally {
             setIsSubmitting(false)
+        }
+    }
+
+    const handleResumeUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+
+        if (file.type !== "application/pdf") {
+            return toast.error("Please upload a PDF file.")
+        }
+
+        setIsUploading(true)
+        try {
+            // 1. Get presigned URL
+            const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/upload-url?fileName=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`, {
+                credentials: 'include'
+            })
+
+            if (!res.ok) throw new Error("Failed to get upload URL")
+
+            const { uploadUrl, publicUrl } = await res.json()
+
+            // 2. Upload to S3
+            const uploadRes = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                    'Content-Type': file.type
+                },
+                body: file
+            })
+
+            if (!uploadRes.ok) throw new Error("Failed to upload to S3")
+
+            // 3. Update profile state
+            setProfile(prev => ({ ...prev, resumeUrl: publicUrl }))
+            toast.success("Resume uploaded successfully")
+        } catch (error) {
+            console.error(error)
+            toast.error("Failed to upload resume")
+        } finally {
+            setIsUploading(false)
         }
     }
 
@@ -204,25 +403,59 @@ const ATSApplyPage = () => {
                 <div key={field.id} className="grid w-full items-center gap-1.5 mt-4">
                     <Label htmlFor={field.id}>{field.label}</Label>
 
-                    <Input
-                        id={field.id}
-                        type={field.type ?? "text"}
-                        placeholder={field.placeholder ?? "Enter your answer"}
-                        value={profile[field.id] ?? ""}
-                        onChange={(e) =>
-                            setProfile((prev) => ({
-                                ...prev,
-                                [field.id]:
-                                    field.type === "number"
-                                        ? Number(e.target.value)
-                                        : e.target.value
-                            }))
-                        }
-                    />
+                    {field.id === "resumeUrl" ? (
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-3">
+                                <Input
+                                    id={field.id}
+                                    type="file"
+                                    accept=".pdf"
+                                    onChange={handleResumeUpload}
+                                    disabled={isUploading}
+                                    className="hidden"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    disabled={isUploading}
+                                    onClick={() => document.getElementById(field.id)?.click()}
+                                    className="w-full md:w-max"
+                                >
+                                    {isUploading ? <Loader2Icon className="animate-spin mr-2" /> : <UploadCloud className="mr-2" />}
+                                    {profile.resumeUrl ? "Change Resume" : "Upload Resume (PDF)"}
+                                </Button>
+                                {profile.resumeUrl && (
+                                    <div className="flex items-center gap-2 text-sm text-green-600 font-medium">
+                                        <FileIcon className="h-4 w-4" />
+                                        Resume Uploaded
+                                    </div>
+                                )}
+                            </div>
+                            {profile.resumeUrl && (
+                                <p className="text-xs text-muted-foreground truncate max-w-xs">
+                                    {profile.resumeUrl}
+                                </p>
+                            )}
+                        </div>
+                    ) : (
+                        <Input
+                            id={field.id}
+                            type={field.type ?? "text"}
+                            placeholder={field.placeholder ?? "Enter your answer"}
+                            value={profile[field.id] ?? ""}
+                            onChange={(e) =>
+                                setProfile((prev) => ({
+                                    ...prev,
+                                    [field.id]:
+                                        field.type === "number"
+                                            ? Number(e.target.value)
+                                            : e.target.value
+                                }))
+                            }
+                        />
+                    )}
                 </div>
             ))}
-
-            <h3 className='text-muted-foreground text-xl mt-3'>Role Specific Questions</h3>
             {selectedRoles.length > 0 && Object.entries(subteam?.roleSpecificQuestions ?? {}).filter(
                 ([role]) => selectedRoles.includes(role)
             ).map(([role, questions]) => (
@@ -262,9 +495,7 @@ const ATSApplyPage = () => {
     )
 }
 
-const ATSApplyList = () => {
-    const params = useParams()
-    const location = useLocation()
+const ATSApplyList = ({ applications }: { applications: ATSApplication[] }) => {
     const navigate = useNavigate()
     const [teams, setTeams] = React.useState<OpenATSTeam[]>([])
 
@@ -293,7 +524,12 @@ const ATSApplyList = () => {
                                         <AvatarFallback className="rounded-lg"><UsersRound size="16" /></AvatarFallback>
                                     </Avatar>
                                     <div className="flex flex-col ml-2">
-                                        <span>{team.teamInfo.friendlyName} ({team.teamInfo.seasonText})</span>
+                                        <div className="flex items-center gap-2">
+                                            <span>{team.teamInfo.friendlyName} ({team.teamInfo.seasonText})</span>
+                                            {applications.some(app => team.recruitingSubteamPks.includes(app.subteamPk)) && (
+                                                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                            )}
+                                        </div>
                                         <span className="text-muted-foreground">{team.teamInfo.description}</span>
                                     </div>
                                 </div>
@@ -302,20 +538,33 @@ const ATSApplyList = () => {
                                 <div className="flex flex-col">
                                     <p className="text-lg text-muted-foreground">Currently Recruiting Subteams</p>
                                     <ul className="list-disc pl-8 pt-2">
-                                        {Object.values(team.subteamInfo).map((teamInfo) => (
-                                            <li><b>{teamInfo.friendlyName}:</b> {teamInfo.description}</li>
-                                        ))}
+                                        {Object.values(team.subteamInfo).map((teamInfo) => {
+                                            const isApplied = applications.some(app => app.subteamPk === teamInfo.pk)
+                                            return (
+                                                <li className="flex items-center gap-2">
+                                                    <b>{teamInfo.friendlyName}:</b> {teamInfo.description}
+                                                    {isApplied && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                                                </li>
+                                            )
+                                        })}
                                     </ul>
 
                                     {team.recruitingSubteamPks.map((subteamPk) => {
                                         const subteamInfo = team.subteamInfo[subteamPk]
+                                        const isApplied = applications.some(app => app.subteamPk === subteamPk)
                                         return (<>
-                                            <p className="text-lg text-muted-foreground mt-5">Available Roles in the {subteamInfo.friendlyName} Subteam</p>
+                                            <div className="flex items-center gap-2 mt-5">
+                                                <p className="text-lg text-muted-foreground">Available Roles in the {subteamInfo.friendlyName} Subteam</p>
+                                            </div>
                                             <div className="flex items-center space-x-2 mt-2">
                                                 {subteamInfo.recruitmentInfo?.roles.map((roleName) => (<Badge>{roleName}</Badge>))}
                                             </div>
-                                            <Button onClick={() => navigate(`./${subteamPk}`)} variant="outline" className='mt-3 max-w-max'>
-                                                Apply to the {subteamInfo.friendlyName} Subteam
+                                            <Button
+                                                onClick={() => isApplied ? navigate(`/apply/applications`) : navigate(`./${subteamPk}`)}
+                                                variant="outline"
+                                                className='mt-3 max-w-max'
+                                            >
+                                                {isApplied ? `View Applications` : `Apply to the ${subteamInfo.friendlyName} Subteam`}
                                                 <ExternalLinkIcon />
                                             </Button>
                                         </>
@@ -337,8 +586,32 @@ const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (profile: Appli
     const [fullName, setFullName] = React.useState("")
     const [otpPageVisible, setOtpPageVisible] = React.useState(false)
     const [otp, setOtp] = React.useState("")
-    const [open, setOpen] = React.useState(true)
-
+    const [open, setOpen] = React.useState(false)
+    //
+    React.useEffect(() => {
+        setIsLoading(true)
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/verifyotpsession`, {
+            method: "GET",
+            credentials: 'include'
+        })
+            .then(async (res) => {
+                if (res.ok) {
+                    const data = await res.json()
+                    onSuccess(data.profile || {})
+                    setOpen(false)
+                }
+                else {
+                    setOpen(true)
+                }
+                // If not ok, just leave the dialog open for login
+            })
+            .catch(() => {
+                setOpen(true)
+                // Session check failed, user needs to log in - this is expected
+            })
+            .finally(() => setIsLoading(false))
+    }, [])
+    //
     const handleLogin = () => {
         setIsLoading(true)
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/otpinit`, {

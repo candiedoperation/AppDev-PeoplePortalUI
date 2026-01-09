@@ -29,6 +29,13 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { toast } from 'sonner'
@@ -66,6 +73,8 @@ interface ApplicantProfile {
     linkedinUrl?: string
     githubUrl?: string
     whyAppDev?: string
+    previousInvolvement?: string;
+    instagramFollow?: string;
     additionalInfo?: string
 }
 
@@ -75,13 +84,39 @@ interface PersonalInfoField {
     label: string;
     placeholder?: string;
     type?: string
+    options?: string[]
+    required?: boolean
 }
 
 const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
-    { id: "resumeUrl", label: "Resume (PDF)" },
+    { id: "resumeUrl", label: "Resume (PDF)", required: true },
     { id: "linkedinUrl", label: "LinkedIn URL" },
     { id: "githubUrl", label: "GitHub URL" },
-    { id: "whyAppDev", label: "Explain what you'd like to get out of App Dev Club (200 words or less)." },
+    {
+        id: "previousInvolvement",
+        label: "Please select your previous involvement in App Dev.",
+        type: "select",
+        options: [
+            "I was a member of Fall 2025 Bootcamp",
+            "I was a member of Spring 2025 Bootcamp",
+            "I previously applied for a project",
+            "I previously participated in a project",
+            "None of the above"
+        ],
+        required: true
+    },
+    {
+        id: "instagramFollow",
+        label: "Are you following appdev_umd on instagram?",
+        type: "select",
+        options: [
+            "Yes 🎉",
+            "No, I don't want to because I am lame ☹️",
+            "I don't have instagram"
+        ],
+        required: true
+    },
+    { id: "whyAppDev", label: "Explain what you'd like to get out of App Dev Club (200 words or less).", required: true },
     { id: "additionalInfo", label: "Is there anything else you'd like to mention?" }
 ]
 interface ATSApplication {
@@ -122,12 +157,20 @@ export const ATSDashboard = () => {
                     setFullName(data.name)
                     setEmail(data.email)
                     setProfile(data.profile || {})
-                    setApplications(data.applications)
+                    setApplications(data.applications || [])
                 }
             })
             .catch(() => {
             })
     }, [location])
+
+    const handleSessionUpdate = (data: OTPSessionResponse) => {
+        setFullName(data.name)
+        setEmail(data.email)
+        setProfile(data.profile || {})
+        setApplications(data.applications || [])
+    }
+
     return (
         <div className="flex flex-col w-full h-full">
             { /* Minimal, Special Header for Onboarding Page */}
@@ -154,7 +197,7 @@ export const ATSDashboard = () => {
             <div style={{ height: "calc(100% - calc(var(--spacing) * 12))" }} className='flex flex-col w-full p-4 gap-3'>
                 <Routes>
                     <Route path="/" element={<ATSApplyList applications={applications} />} />
-                    <Route path='/:subteamId' element={<ATSApplyPage applications={applications} />} />
+                    <Route path='/:subteamId' element={<ATSApplyPage applications={applications} onSessionUpdate={handleSessionUpdate} />} />
                     <Route path='/applications' element={<ATSApplicationsList applications={applications} profile={profile} fullName={fullName} email={email} />} />
                 </Routes>
             </div>
@@ -196,6 +239,15 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                 >
                                     {profile[field.id]}
                                 </a>
+                            ) : field.id === "resumeUrl" && profile[field.id] ? (
+                                <a
+                                    href={`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/download?key=${encodeURIComponent(profile[field.id] as string)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block font-medium text-blue-500 hover:underline truncate"
+                                >
+                                    View Resume (PDF)
+                                </a>
                             ) : (
                                 <p className="font-medium whitespace-pre-wrap">{profile[field.id] || "No response provided"}</p>
                             )}
@@ -223,7 +275,26 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                         ))}
                                     </div>
                                 </div>
-                                <Badge className="px-3 py-1 text-sm">{app.stage}</Badge>
+                                {(() => {
+                                    const stageMap: { [key: string]: { label: string, className: string, variant?: "default" | "secondary" | "destructive" | "outline" } } = {
+                                        'New Applications': { label: 'Under review', className: 'bg-zinc-500 hover:bg-zinc-600', variant: 'default' },
+                                        'Rejected': { label: 'Rejected', className: '', variant: 'destructive' },
+                                        'Interview': { label: 'Interview', className: 'bg-blue-500 hover:bg-blue-600', variant: 'default' },
+                                        'Rejected After Interview': { label: 'Rejected', className: '', variant: 'destructive' },
+                                        'Hired': { label: 'Accepted', className: 'bg-green-500 hover:bg-green-600', variant: 'default' }
+                                    };
+
+                                    const stageInfo = stageMap[app.stage] || { label: app.stage, className: '', variant: 'secondary' };
+
+                                    return (
+                                        <Badge
+                                            variant={stageInfo.variant}
+                                            className={`px-3 py-1 text-sm ${stageInfo.className}`}
+                                        >
+                                            {stageInfo.label}
+                                        </Badge>
+                                    );
+                                })()}
                             </div>
 
                             {app.responses && Object.keys(app.responses).length > 0 && (
@@ -256,7 +327,7 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
 }
 
 
-const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
+const ATSApplyPage = ({ applications, onSessionUpdate }: { applications: ATSApplication[], onSessionUpdate: (data: OTPSessionResponse) => void }) => {
     const navigate = useNavigate()
     const params = useParams()
     const [subteam, setSubteam] = React.useState<ATSSubTeamDesc>()
@@ -285,11 +356,88 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
                     setSelectedRoles([team.roles[0]])
                 }
             })
-    }, [params.subteamId, applications, navigate])
+    }, [params.subteamId, applications, navigate, profile, location])
+
+    // Autofill parent team interest question
+    React.useEffect(() => {
+        if (!subteam || !applications) return;
+
+        const parentName = subteam.parentInfo.friendlyName;
+        const questionKey = `Why are you interested in ${parentName}?`;
+
+        // Check if we already have a value entered by the user
+        if (responses[questionKey]) return;
+
+        // Verify if the applicant has applied to another subteam under the same parent team
+        const previousApp = applications.find(
+            app => app.parentTeamName === parentName && app.responses && app.responses[questionKey]
+        );
+
+        if (previousApp) {
+            setResponses(prev => ({
+                ...prev,
+                [questionKey]: previousApp.responses[questionKey]
+            }));
+        }
+    }, [subteam, applications, responses]);
 
     const handleApply = async () => {
         if (selectedRoles.length === 0) {
             return toast.error("Please select at least one role.")
+        }
+
+        if (!profile.resumeUrl) {
+            return toast.error("Please upload your resume.")
+        }
+
+        if (!profile.previousInvolvement) {
+            return toast.error("Please select your previous involvement.")
+        }
+
+        if (!profile.instagramFollow) {
+            return toast.error("Please answer if you follow us on Instagram.")
+        }
+
+        if (!profile.whyAppDev) {
+            return toast.error("Please explain what you'd like to get out of App Dev.")
+        }
+
+        if (profile.linkedinUrl && profile.linkedinUrl.trim() !== "") {
+            if (!profile.linkedinUrl.includes("linkedin.com")) {
+                return toast.error("Please enter a valid LinkedIn URL.")
+            }
+            try {
+                new URL(profile.linkedinUrl)
+            } catch {
+                return toast.error("Please enter a valid URL for LinkedIn (starting with http:// or https://).")
+            }
+        }
+
+        if (profile.githubUrl && profile.githubUrl.trim() !== "") {
+            if (!profile.githubUrl.includes("github.com")) {
+                return toast.error("Please enter a valid GitHub URL.")
+            }
+            try {
+                new URL(profile.githubUrl)
+            } catch {
+                return toast.error("Please enter a valid URL for GitHub (starting with http:// or https://).")
+            }
+        }
+
+        if (subteam) {
+            const parentInterestKey = `Why are you interested in ${subteam.parentInfo.friendlyName}?`
+            if (!responses[parentInterestKey]) {
+                return toast.error(`Please explain why you are interested in ${subteam.parentInfo.friendlyName}.`)
+            }
+
+            for (const role of selectedRoles) {
+                const questions = subteam.roleSpecificQuestions[role] || []
+                for (const q of questions) {
+                    if (!responses[q]) {
+                        return toast.error(`Please answer: ${q}`)
+                    }
+                }
+            }
         }
 
         setIsSubmitting(true)
@@ -338,7 +486,7 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
 
             if (!res.ok) throw new Error("Failed to get upload URL")
 
-            const { uploadUrl, publicUrl } = await res.json()
+            const { uploadUrl, publicUrl, key } = await res.json()
 
             // 2. Upload to S3
             const uploadRes = await fetch(uploadUrl, {
@@ -352,7 +500,7 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
             if (!uploadRes.ok) throw new Error("Failed to upload to S3")
 
             // 3. Update profile state
-            setProfile(prev => ({ ...prev, resumeUrl: publicUrl }))
+            setProfile(prev => ({ ...prev, resumeUrl: key }))
             toast.success("Resume uploaded successfully")
         } catch (error) {
             console.error(error)
@@ -364,7 +512,10 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
 
     return (
         <div className='flex flex-col m-3'>
-            <AccountLoginAndVerifyDialog onSuccess={(p) => setProfile(prev => ({ ...prev, ...p }))} />
+            <AccountLoginAndVerifyDialog onSuccess={(data) => {
+                setProfile(prev => ({ ...prev, ...(data.profile || {}) }))
+                onSessionUpdate(data)
+            }} />
             <Button className='max-w-max' onClick={() => navigate("../")} variant="outline">
                 <ChevronLeftIcon />
                 Back to Open Roles
@@ -401,7 +552,10 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
             <h3 className='text-muted-foreground text-xl mt-3'>Personal Information</h3>
             {PERSONAL_INFO_FIELDS.map((field) => (
                 <div key={field.id} className="grid w-full items-center gap-1.5 mt-4">
-                    <Label htmlFor={field.id}>{field.label}</Label>
+                    <Label htmlFor={field.id}>
+                        {field.label}
+                        {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
 
                     {field.id === "resumeUrl" ? (
                         <div className="flex flex-col gap-2">
@@ -432,11 +586,37 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
                                 )}
                             </div>
                             {profile.resumeUrl && (
-                                <p className="text-xs text-muted-foreground truncate max-w-xs">
-                                    {profile.resumeUrl}
-                                </p>
+                                <a
+                                    href={profile.resumeUrl.startsWith("http") ? profile.resumeUrl : `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/download?key=${encodeURIComponent(profile.resumeUrl)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-500 hover:underline truncate max-w-xs block"
+                                >
+                                    {profile.resumeUrl.startsWith("http") ? profile.resumeUrl : "View Uploaded Resume"}
+                                </a>
                             )}
                         </div>
+                    ) : field.type === "select" ? (
+                        <Select
+                            value={profile[field.id]?.toString() ?? ""}
+                            onValueChange={(value) =>
+                                setProfile((prev) => ({
+                                    ...prev,
+                                    [field.id]: value
+                                }))
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select an option" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {field.options?.map((option) => (
+                                    <SelectItem key={option} value={option}>
+                                        {option}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     ) : (
                         <Input
                             id={field.id}
@@ -455,31 +635,62 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
                         />
                     )}
                 </div>
-            ))}
-            {selectedRoles.length > 0 && Object.entries(subteam?.roleSpecificQuestions ?? {}).filter(
-                ([role]) => selectedRoles.includes(role)
-            ).map(([role, questions]) => (
-                <div key={role} className="mt-5">
-                    <h3 className='text-muted-foreground text-xl'>{role} Questions</h3>
-                    {questions.map((question, idx) => (
-                        <div key={`${role}-${idx}`} className="grid w-full items-center gap-1.5 mt-4">
-                            <Label htmlFor={`${role}-${idx}`}>{question}</Label>
+            ))
+            }
+            {
+                selectedRoles.length > 0 && subteam?.parentInfo && (
+                    <div className="mt-5">
+                        <h3 className='text-muted-foreground text-xl'>Team Questions</h3>
+                        <div className="grid w-full items-center gap-1.5 mt-4">
+                            <Label htmlFor="parent-team-interest">
+                                Why are you interested in {subteam.parentInfo.friendlyName}?
+                                <span className="text-red-500 ml-1">*</span>
+                            </Label>
                             <Input
-                                id={`${role}-${idx}`}
+                                id="parent-team-interest"
                                 type="text"
                                 placeholder="Enter your answer"
-                                value={responses[question] ?? ""}
+                                value={responses[`Why are you interested in ${subteam.parentInfo.friendlyName}?`] ?? ""}
                                 onChange={(e) =>
                                     setResponses((prev) => ({
                                         ...prev,
-                                        [question]: e.target.value
+                                        [`Why are you interested in ${subteam.parentInfo.friendlyName}?`]: e.target.value
                                     }))
                                 }
                             />
                         </div>
-                    ))}
-                </div>
-            ))}
+                    </div>
+                )
+            }
+            {
+                selectedRoles.length > 0 && Object.entries(subteam?.roleSpecificQuestions ?? {}).filter(
+                    ([role]) => selectedRoles.includes(role)
+                ).map(([role, questions]) => (
+                    <div key={role} className="mt-5">
+                        <h3 className='text-muted-foreground text-xl'>{role} Questions</h3>
+                        {questions.map((question, idx) => (
+                            <div key={`${role}-${idx}`} className="grid w-full items-center gap-1.5 mt-4">
+                                <Label htmlFor={`${role}-${idx}`}>
+                                    {question}
+                                    <span className="text-red-500 ml-1">*</span>
+                                </Label>
+                                <Input
+                                    id={`${role}-${idx}`}
+                                    type="text"
+                                    placeholder="Enter your answer"
+                                    value={responses[question] ?? ""}
+                                    onChange={(e) =>
+                                        setResponses((prev) => ({
+                                            ...prev,
+                                            [question]: e.target.value
+                                        }))
+                                    }
+                                />
+                            </div>
+                        ))}
+                    </div>
+                ))
+            }
 
             <Button
                 onClick={handleApply}
@@ -491,7 +702,7 @@ const ATSApplyPage = ({ applications }: { applications: ATSApplication[] }) => {
             </Button>
 
 
-        </div>
+        </div >
     )
 }
 
@@ -580,7 +791,7 @@ const ATSApplyList = ({ applications }: { applications: ATSApplication[] }) => {
     )
 }
 
-const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (profile: ApplicantProfile) => void }) => {
+const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (data: OTPSessionResponse) => void }) => {
     const [isLoading, setIsLoading] = React.useState(false)
     const [schoolEmail, setSchoolEmail] = React.useState("")
     const [fullName, setFullName] = React.useState("")
@@ -597,7 +808,7 @@ const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (profile: Appli
             .then(async (res) => {
                 if (res.ok) {
                     const data = await res.json()
-                    onSuccess(data.profile || {})
+                    onSuccess(data)
                     setOpen(false)
                 }
                 else {
@@ -655,7 +866,7 @@ const AccountLoginAndVerifyDialog = ({ onSuccess }: { onSuccess: (profile: Appli
             .then(async (res) => {
                 if (res.ok) {
                     const data = await res.json()
-                    onSuccess(data.profile || {})
+                    onSuccess(data)
                     setOpen(false)
                 }
 

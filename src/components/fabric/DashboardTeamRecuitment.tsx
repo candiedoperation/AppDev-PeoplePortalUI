@@ -2,6 +2,7 @@ import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
 import React from "react";
 import { toast } from "sonner";
 import type { TeamInfo, TeamInfoResponse } from "./DashboardTeamInfo";
+import { RecruitmentStatistics } from "./RecruitmentStatistics";
 import { useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
@@ -12,6 +13,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Loader2Icon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 
 const KANBAN_COLUMNS = [
@@ -28,6 +30,12 @@ interface SubteamATSConfig {
 }
 
 export const DashboardTeamRecruitment = () => {
+    const STAGE_STYLES: { [key: string]: string } = {
+        'applied': 'text-blue-700 bg-blue-50 border-blue-200',
+        'interviewing': 'text-purple-700 bg-purple-50 border-purple-200',
+        'accepted': 'text-green-700 bg-green-50 border-green-200',
+        'rejected': 'text-red-700 bg-red-50 border-red-200',
+    }
     const params = useParams()
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
@@ -41,6 +49,92 @@ export const DashboardTeamRecruitment = () => {
 
     const [applications, setApplications] = React.useState<any[]>([])
     const [selectedApplication, setSelectedApplication] = React.useState<any | null>(null)
+    const [applicantUrls, setApplicantUrls] = React.useState<any | null>(null)
+    const [otherApplications, setOtherApplications] = React.useState<any[]>([])
+    const [dragStartColumn, setDragStartColumn] = React.useState<string | null>(null);
+
+    function handleDragStart(event: DragStartEvent) {
+        const item = applications.find(a => a.id === event.active.id);
+        if (item) setDragStartColumn(item.column);
+    }
+
+    function handleDragEnd(event: DragEndEvent) {
+        const { active, over } = event;
+        const activeId = active.id;
+        if (!over) {
+            setDragStartColumn(null);
+            return;
+        }
+
+        // Determine the new column
+        // We use the same logic as KanbanProvider to guess where it landed
+        // But simpler: checking if over.id is a column or an item in a column
+
+
+
+        // If overContainer corresponds to a column ID, use it.
+        // But dnd-kit is flexible.
+
+        // Let's rely on checking the item in the 'applications' state
+        // Since 'onDataChange' runs during drag, the item might already be in the new column in the state.
+
+        // However, safe approach:
+        // Find the application in the *latest* applications state
+        const app = applications.find(a => a.id === activeId);
+
+        if (app && app.column !== dragStartColumn) {
+            // It changed column!
+            // Trigger API update
+            // Optimistic update is already done by onDataChange
+
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${activeId}/stage`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ column: app.column })
+            })
+                .then(res => {
+                    if (res.ok) {
+                        toast.success("Stage Updated", { description: `Moved ${app.name} to ${KANBAN_COLUMNS.find(c => c.id === app.column)?.name}` })
+                    } else {
+                        toast.error("Failed to Update Stage");
+                        // Revert? (Complex, maybe just reload data)
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    toast.error("Failed to Update Stage");
+                })
+        }
+
+        setDragStartColumn(null);
+    }
+
+    React.useEffect(() => {
+        if (selectedApplication?.applicantId) {
+            setApplicantUrls(null) // Reset while loading
+            setOtherApplications([]) // Reset while loading
+
+            // Fetch secure resume URL
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/applicant/${selectedApplication.applicantId}/resume`)
+                .then(async (res) => {
+                    if (res.ok) {
+                        const urls = await res.json()
+                        setApplicantUrls(urls)
+                    }
+                })
+                .catch(err => console.error("Failed to fetch applicant URLs", err))
+
+            // Fetch application history
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/applicant/${selectedApplication.applicantId}/applications`)
+                .then(async (res) => {
+                    if (res.ok) {
+                        const apps = await res.json()
+                        setOtherApplications(apps)
+                    }
+                })
+                .catch(err => console.error("Failed to fetch applicant history", err))
+        }
+    }, [selectedApplication])
 
     // Fetch applications from MongoDB
     React.useEffect(() => {
@@ -157,6 +251,8 @@ export const DashboardTeamRecruitment = () => {
                             columns={KANBAN_COLUMNS}
                             data={applications}
                             onDataChange={(data) => setApplications(data)}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
                             className="overflow-x-auto flex h-full"
                         >
                             {(/* column */ col) => (
@@ -178,6 +274,10 @@ export const DashboardTeamRecruitment = () => {
                                 </KanbanBoard>
                             )}
                         </KanbanProvider>
+                    </TabsContent>
+
+                    <TabsContent className="overflow-y-auto h-full" value="statistics">
+                        <RecruitmentStatistics applications={applications} subTeams={subTeams} />
                     </TabsContent>
 
                     <TabsContent value="settings">
@@ -272,40 +372,130 @@ export const DashboardTeamRecruitment = () => {
 
             {/* Application Details Modal */}
             <Dialog open={selectedApplication !== null} onOpenChange={(open) => !open && setSelectedApplication(null)}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>{selectedApplication?.name}</DialogTitle>
-                        <DialogDescription>Application Details</DialogDescription>
-                    </DialogHeader>
-                    <div className="flex flex-col gap-4 mt-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label className="text-muted-foreground">Role</Label>
-                                <p className="font-medium">{selectedApplication?.role}</p>
-                            </div>
-                            <div>
-                                <Label className="text-muted-foreground">Stage</Label>
-                                <p className="font-medium capitalize">{selectedApplication?.column}</p>
-                            </div>
-                            <div>
-                                <Label className="text-muted-foreground">Applied At</Label>
-                                <p className="font-medium">{selectedApplication?.appliedAt ? new Date(selectedApplication.appliedAt).toLocaleDateString() : 'N/A'}</p>
-                            </div>
-                        </div>
+                <DialogContent className="!max-w-[95vw] !w-[95vw] !h-[95vh] p-0 flex gap-0">
 
-                        {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
-                            <div className="mt-2">
-                                <Label className="text-muted-foreground">Responses</Label>
-                                <div className="mt-2 space-y-3">
-                                    {Object.entries(selectedApplication.responses).map(([question, answer]) => (
-                                        <div key={question} className="bg-muted p-3 rounded-lg">
-                                            <p className="text-sm font-medium">{question}</p>
-                                            <p className="text-sm text-muted-foreground mt-1">{answer as string}</p>
-                                        </div>
-                                    ))}
+                    {/* Left Sidebar: Other Applications */}
+                    <div className="w-64 bg-muted/20 border-r p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
+                        <div>
+                            <h3 className="font-semibold text-lg">Other Apps</h3>
+                            <p className="text-xs text-muted-foreground">Application history for this candidate.</p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            {otherApplications.map((app) => (
+                                <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
+                                    <p className="font-medium truncate">
+                                        {app.parentTeamName && <span className="text-muted-foreground">{app.parentTeamName} - </span>}
+                                        {app.subteamName}
+                                    </p>
+                                    <div className="flex justify-between items-center mt-1">
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
+                                            {app.stage}
+                                        </span>
+                                        {app.id === selectedApplication?.id && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>}
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p>
+                                </div>
+                            ))}
+                            {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
+                        </div>
+                    </div>
+
+                    {/* Right Content: Application Details */}
+                    <div className="flex-1 p-6 overflow-y-auto">
+                        <DialogHeader>
+                            <DialogTitle className="text-2xl">{selectedApplication?.name}</DialogTitle>
+                            <DialogDescription>Application Details</DialogDescription>
+                        </DialogHeader>
+                        <div className="flex flex-col gap-6 mt-6">
+                            <div className="grid grid-cols-3 gap-4 border-b pb-4">
+                                <div>
+                                    <Label className="text-muted-foreground">Role</Label>
+                                    <p className="font-medium">{selectedApplication?.role}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground">Stage</Label>
+                                    <p className="font-medium capitalize">{selectedApplication?.column}</p>
+                                </div>
+                                <div>
+                                    <Label className="text-muted-foreground">Applied At</Label>
+                                    <p className="font-medium">{selectedApplication?.appliedAt ? new Date(selectedApplication.appliedAt).toLocaleDateString() : 'N/A'}</p>
                                 </div>
                             </div>
-                        )}
+
+                            {/* Applicant Profile Section */}
+                            {selectedApplication?.profile && (
+                                <div className="border-b pb-4">
+                                    <h3 className="text-lg font-semibold mb-3">Applicant Profile</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {applicantUrls?.resumeUrl && (
+                                            <div className="col-span-full">
+                                                <Label className="text-muted-foreground block mb-1">Resume</Label>
+                                                <iframe
+                                                    src={applicantUrls.resumeUrl}
+                                                    className="w-full min-h-[600px] border rounded-md"
+                                                    title="Resume"
+                                                />
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.linkedinUrl && (
+                                            <div>
+                                                <Label className="text-muted-foreground">LinkedIn</Label>
+                                                <a href={selectedApplication.profile.linkedinUrl} target="_blank" rel="noreferrer" className="block text-blue-600 hover:underline truncate">
+                                                    {selectedApplication.profile.linkedinUrl}
+                                                </a>
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.githubUrl && (
+                                            <div>
+                                                <Label className="text-muted-foreground">GitHub</Label>
+                                                <a href={selectedApplication.profile.githubUrl} target="_blank" rel="noreferrer" className="block text-blue-600 hover:underline truncate">
+                                                    {selectedApplication.profile.githubUrl}
+                                                </a>
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.whyAppDev && (
+                                            <div className="col-span-full">
+                                                <Label className="text-muted-foreground">Why AppDev?</Label>
+                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.whyAppDev}</p>
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.previousInvolvement && (
+                                            <div className="col-span-full">
+                                                <Label className="text-muted-foreground">Previous Involvement</Label>
+                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.previousInvolvement}</p>
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.additionalInfo && (
+                                            <div className="col-span-full">
+                                                <Label className="text-muted-foreground">Additional Info</Label>
+                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.additionalInfo}</p>
+                                            </div>
+                                        )}
+                                        {selectedApplication.profile.instagramFollow && (
+                                            <div className="col-span-full">
+                                                <Label className="text-muted-foreground">Instagram Follow</Label>
+                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.instagramFollow}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Responses Section */}
+                            {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-3">Role Specific Responses</h3>
+                                    <div className="space-y-4">
+                                        {Object.entries(selectedApplication.responses).map(([question, answer]) => (
+                                            <div key={question} className="bg-muted/30 p-3 rounded-lg border">
+                                                <p className="text-sm font-medium mb-1">{question}</p>
+                                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{answer as string}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

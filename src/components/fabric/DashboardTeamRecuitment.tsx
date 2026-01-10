@@ -138,7 +138,7 @@ export const DashboardTeamRecruitment = () => {
 
     // Fetch applications from MongoDB
     React.useEffect(() => {
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}`) // must fix
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}`, { credentials: 'include' })
             .then(async (response) => {
                 const data = await response.json();
                 if (response.ok) {

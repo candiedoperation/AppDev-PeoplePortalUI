@@ -16,7 +16,10 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Route, Router, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import logo from '../assets/logo.svg'
 import React from 'react'
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config'
@@ -25,6 +28,7 @@ import {
     AwardIcon,
     CheckCircle2,
     ChevronLeftIcon,
+    CircleXIcon,
     ExternalLinkIcon,
     FileIcon,
     GithubIcon,
@@ -33,6 +37,8 @@ import {
     Loader2Icon,
     LogOutIcon,
     MailIcon,
+    NotepadText,
+    PlusIcon,
     SendIcon,
     SparklesIcon,
     TargetIcon,
@@ -43,7 +49,6 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import {
@@ -67,13 +72,29 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-interface ATSSubTeamDesc {
-    subteamPk: string,
-    _id: string,
-    roleSpecificQuestions: { [key: string]: string[] },
-    roles: string[],
-    subteamInfo: OpenATSTeamInfo,
-    parentInfo: OpenATSTeamInfo
+// Type for subteam preference (internal mapping)
+interface SubteamPreference {
+    subteamPk: string;
+    roles: string[];
+}
+
+// Team data from backend
+interface ATSTeamData {
+    teamPk: string;
+    teamInfo: {
+        name: string;
+        friendlyName: string;
+        description: string;
+        seasonText: string;
+        pk: string;
+    };
+    recruitingSubteams: Array<{
+        subteamPk: string;
+        friendlyName: string;
+        description: string;
+        roles: string[];
+        roleSpecificQuestions: { [key: string]: string[] };
+    }>;
 }
 
 interface OpenATSTeamInfo {
@@ -99,7 +120,6 @@ interface ApplicantProfile {
     [key: string]: string | undefined
 }
 
-
 interface PersonalInfoField {
     id: string
     label: string;
@@ -116,7 +136,7 @@ const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
     { id: "resumeUrl", label: "Resume (Upload PDF Only)", type: "file", required: true },
     {
         id: "instagramFollow",
-        label: "Do you follow @appdev_umd on Instagram? (We check 👀)",
+        label: "Do you follow App Dev (@appdev_umd) on Instagram?",
         type: "select",
         options: [
             "Yes 🥳",
@@ -127,21 +147,24 @@ const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
     },
     {
         id: "whyAppDev",
-        label: "Explain what you'd like to get out of App Dev Club (200 words or less).",
+        label: "Explain what you'd like to get out of App Dev Club",
         required: true,
         multiline: true
     },
     { id: "additionalInfo", label: "Is there anything else you'd like to mention?", multiline: true }
 ]
+
+// Updated application interface - team-level
 interface ATSApplication {
     _id: string;
-    subteamPk: string;
-    subteamName?: string;
-    parentTeamName?: string;
-    roles: string[];
+    teamPk: string;  // CHANGED from subteamPk
+    teamName?: string;  // CHANGED from subteamName/parentTeamName
+    subteamPreferences: SubteamPreference[];  // CHANGED from roles: string[]
     stage: string;
     appliedAt: string;
     responses: { [key: string]: string };
+    hiredSubteamPk?: string;  // NEW
+    hiredRole?: string;  // NEW
 }
 
 interface OTPSessionResponse {
@@ -152,13 +175,13 @@ interface OTPSessionResponse {
 }
 
 export const ATSDashboard = () => {
-    const params = useParams()
     const location = useLocation()
     const navigate = useNavigate()
     const [fullName, setFullName] = React.useState("")
     const [email, setEmail] = React.useState("")
     const [profile, setProfile] = React.useState<ApplicantProfile>({})
     const [applications, setApplications] = React.useState<ATSApplication[]>([])
+    const [triggerLogin, setTriggerLogin] = React.useState(false)
 
     React.useEffect(() => {
         window.scrollTo(0, 0)
@@ -206,20 +229,28 @@ export const ATSDashboard = () => {
         setEmail(data.email)
         setProfile(data.profile || {})
         setApplications(data.applications || [])
+
+        // If we are on an apply page and the user has already applied, redirect to view
+        if (location.pathname.startsWith('/apply/') && !location.pathname.endsWith('/applications')) {
+            const pathParts = location.pathname.split('/');
+            const possibleTeamId = pathParts[pathParts.length - 1]; // /apply/:teamId
+
+            if (possibleTeamId && data.applications && data.applications.some(app => app.teamPk === possibleTeamId)) {
+                toast.info("You have already applied to this team. Redirecting to your application...");
+                navigate("/apply/applications");
+            }
+        }
     }
 
     return (
         <div className="flex flex-col w-full h-full">
             { /* Polished Header */}
-            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <header className="fixed top-0 left-0 right-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <div className="flex h-16 items-center px-6 gap-4 max-w-7xl mx-auto">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate("/apply")}>
-                        <div className="bg-primary/10 p-2 rounded-xl">
-                            <img className="h-6 w-6" src={logo} alt="App Dev Logo" />
-                        </div>
+                        <img className="h-8 w-8" src={logo} alt="App Dev Logo" />
                         <div className="flex flex-col">
-                            <span className="text-sm font-black tracking-tight uppercase">Portal</span>
-                            <span className="text-[10px] text-muted-foreground font-bold leading-none tracking-widest uppercase opacity-70">Recruitment</span>
+                            Recruitment
                         </div>
                     </div>
 
@@ -269,16 +300,19 @@ export const ATSDashboard = () => {
 
 
             <AccountLoginAndVerifyDialog
-                open={!fullName && location.pathname.includes("/apply/") && !location.pathname.endsWith("/apply/")}
-                onSuccess={handleSessionUpdate}
+                open={(!fullName && location.pathname.includes("/apply/") && !location.pathname.endsWith("/apply/") && !location.pathname.endsWith("/applications")) || triggerLogin}
+                onSuccess={(data) => {
+                    setTriggerLogin(false);
+                    handleSessionUpdate(data);
+                }}
                 fullName={fullName}
             />
 
-            <div style={{ height: "calc(100% - calc(var(--spacing) * 12))" }} className='flex flex-col w-full p-4 gap-3'>
+            <div className='flex flex-col w-full px-4 pb-4 pt-20 gap-3'>
                 <Routes>
                     <Route path="/" element={<ATSApplyList applications={applications} />} />
                     <Route path='/applications' element={<ATSApplicationsList applications={applications} profile={profile} fullName={fullName} email={email} />} />
-                    <Route path='/:subteamId' element={<ATSApplyPage applications={applications} profile={profile} onProfileUpdate={setProfile} />} />
+                    <Route path='/:teamId' element={<ATSApplyPage applications={applications} profile={profile} onProfileUpdate={setProfile} fullName={fullName} onRequestLogin={() => setTriggerLogin(true)} />} />
                 </Routes>
             </div>
         </div>
@@ -405,20 +439,29 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                     <div className="p-6 md:p-8 flex flex-col gap-6">
                                         <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                                             <div className="space-y-2">
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="outline" className="text-[10px] uppercase tracking-tighter font-black bg-muted/50 py-0 h-5">
-                                                        {app.parentTeamName || "Club Wide"}
-                                                    </Badge>
-                                                </div>
                                                 <h3 className="text-2xl font-black tracking-tight">
-                                                    {app.subteamName || app.subteamPk}
+                                                    {app.teamName || app.teamPk}
                                                 </h3>
-                                                <div className="flex flex-wrap gap-2 pt-1">
-                                                    {app.roles.map((role) => (
-                                                        <Badge key={role} className="bg-primary/5 text-primary border-primary/10 font-bold px-3">
-                                                            {role}
-                                                        </Badge>
+                                                {/* Show subteam preferences */}
+                                                <div className="flex flex-col gap-2 pt-1">
+                                                    {app.subteamPreferences.map((pref, idx) => (
+                                                        <div key={idx} className="flex flex-wrap gap-2 items-center">
+                                                            <Badge variant="outline" className="text-[10px] uppercase tracking-tighter font-black bg-muted/50 py-0 h-5">
+                                                                Preference {idx + 1}
+                                                            </Badge>
+                                                            {pref.roles.map((role) => (
+                                                                <Badge key={role} className="bg-primary/5 text-primary border-primary/10 font-bold px-3">
+                                                                    {role}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
                                                     ))}
+                                                    {/* Show hired status if applicable */}
+                                                    {app.hiredSubteamPk && (
+                                                        <Badge className="bg-green-500/10 text-green-600 border-green-200 w-max">
+                                                            Hired: {app.hiredRole}
+                                                        </Badge>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -486,13 +529,208 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
 }
 
 
-const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }: { applications: ATSApplication[], profile: ApplicantProfile, onProfileUpdate: (p: ApplicantProfile) => void }) => {
+// Sortable Item Component
+const SortableRoleItem = ({ id, onRemove }: { id: string, onRemove: (id: string) => void }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : undefined,
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`flex items-center justify-between p-3 bg-secondary/30 border border-border/50 rounded-lg group hover:bg-secondary/50 transition-colors ${isDragging ? 'opacity-50 ring-2 ring-primary' : ''} touch-none`}>
+            <div className="flex items-center gap-3">
+                <div className="cursor-grab text-muted-foreground/50 group-hover:text-muted-foreground p-1">
+                    <Users2Icon className="h-4 w-4" />
+                </div>
+                <span className="font-medium text-sm">{id}</span>
+            </div>
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(id);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+            >
+                <CircleXIcon />
+            </Button>
+        </div>
+    );
+};
+
+// Role Preference Selector Component
+const RolePreferenceSelector = ({
+    allRoles,
+    selectedRoles,
+    onChange
+}: {
+    allRoles: string[],
+    selectedRoles: string[],
+    onChange: (roles: string[]) => void
+}) => {
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+    const [activeId, setActiveId] = React.useState<string | null>(null);
+
+    const availableRoles = allRoles.filter(role => !selectedRoles.includes(role));
+
+    const handleDragStart = (event: any) => {
+        setActiveId(event.active.id);
+    };
+
+    const handleDragEnd = (event: any) => {
+        const { active, over } = event;
+        setActiveId(null);
+
+        if (active.id !== over.id) {
+            const oldIndex = selectedRoles.indexOf(active.id);
+            const newIndex = selectedRoles.indexOf(over.id);
+            onChange(arrayMove(selectedRoles, oldIndex, newIndex));
+        }
+    };
+
+    const addRole = (role: string) => {
+        onChange([...selectedRoles, role]);
+    };
+
+    const removeRole = (role: string) => {
+        onChange(selectedRoles.filter(r => r !== role));
+    };
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-1">
+            {/* Left: Available Roles */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Available Roles</Label>
+                    <Badge variant="outline" className="text-[10px]">{availableRoles.length}</Badge>
+                </div>
+                <div className="grid gap-2">
+                    {availableRoles.length === 0 ? (
+                        <div className="p-8 border border-dashed rounded-lg text-center text-sm text-muted-foreground bg-muted/20">
+                            {selectedRoles.length > 0 ? "All roles selected." : "No roles available."}
+                        </div>
+                    ) : (
+                        availableRoles.map(role => (
+                            <div key={role} className="flex items-center justify-between p-3 bg-card border border-border/50 rounded-lg hover:border-primary/50 transition-colors group cursor-pointer" onClick={() => addRole(role)}>
+                                <span className="font-bold text-sm">{role}</span>
+                                <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-muted-foreground/60"
+                                >
+                                    <PlusIcon className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </div>
+
+            {/* Right: Selected Roles (Sortable) */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-primary uppercase tracking-wider">Your Preferences (Ranked)</Label>
+                    <Badge className="bg-primary/10 text-primary hover:bg-primary/20 border-none">{selectedRoles.length}</Badge>
+                </div>
+                <div className="bg-muted/10 rounded-xl border border-border/50 p-4 min-h-[200px]">
+                    {selectedRoles.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center p-4 text-muted-foreground opacity-60 gap-2">
+                            <TargetIcon className="h-8 w-8 mb-2" />
+                            <p className="text-sm font-medium">No roles selected</p>
+                            <p className="text-xs">
+                                Select roles from the left to add them here.<br />
+                                <span className="opacity-70 mt-1 block">Your first choice is the most important!</span>
+                            </p>
+                        </div>
+                    ) : (
+                        <DndContext
+                            sensors={sensors}
+                            collisionDetection={closestCenter}
+                            onDragEnd={handleDragEnd}
+                            onDragStart={handleDragStart}
+                        >
+                            <SortableContext
+                                items={selectedRoles}
+                                strategy={verticalListSortingStrategy}
+                            >
+                                <div className="space-y-2">
+                                    {selectedRoles.map(role => (
+                                        <SortableRoleItem key={role} id={role} onRemove={removeRole} />
+                                    ))}
+                                </div>
+                            </SortableContext>
+                            <DragOverlay>
+                                {activeId ? (
+                                    <div className="flex items-center justify-between p-3 bg-secondary border border-primary/50 rounded-lg shadow-xl ring-2 ring-primary opacity-90 cursor-grabbing w-full max-w-[300px]">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-1">
+                                                <Users2Icon className="h-4 w-4" />
+                                            </div>
+                                            <span className="font-medium text-sm">{activeId}</span>
+                                        </div>
+                                    </div>
+                                ) : null}
+                            </DragOverlay>
+                        </DndContext>
+                    )}
+                </div>
+                {selectedRoles.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground text-center animate-pulse">
+                        Drag items to reorder your preference
+                    </p>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const ATSApplyPage = ({
+    applications,
+    profile: parentProfile,
+    onProfileUpdate,
+    fullName,
+    onRequestLogin
+}: {
+    applications: ATSApplication[],
+    profile: ApplicantProfile,
+    onProfileUpdate: (p: ApplicantProfile) => void,
+    fullName: string,
+    onRequestLogin: () => void
+}) => {
     const navigate = useNavigate()
     const params = useParams()
-    const [subteam, setSubteam] = React.useState<ATSSubTeamDesc>()
+
+    // NEW: Trigger login if not authenticated
+    React.useEffect(() => {
+        if (!fullName) {
+            onRequestLogin();
+        }
+    }, [fullName]);
+
+    // NEW: Team data state
+    const [teamData, setTeamData] = React.useState<ATSTeamData | null>(null)
+    const [allRoles, setAllRoles] = React.useState<string[]>([])
+    const [roleToSubteamMap, setRoleToSubteamMap] = React.useState<Map<string, string>>(new Map())
 
     const [selectedRoles, setSelectedRoles] = React.useState<string[]>([])
-
     const [profile, setProfile] = React.useState<ApplicantProfile>(parentProfile)
     const [responses, setResponses] = React.useState<{ [question: string]: string }>({})
 
@@ -506,36 +744,62 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
     const [isSubmitting, setIsSubmitting] = React.useState(false)
     const [isUploading, setIsUploading] = React.useState(false)
 
+    // NEW: Fetch team data and build role mappings
     React.useEffect(() => {
-        if (applications.some(app => app.subteamPk === params.subteamId)) {
-            toast.error("You've already applied to this subteam.")
+        // Check if already applied to this TEAM
+        if (applications.some(app => app.teamPk === params.teamId)) {
+            toast.error("You've already applied to this team.")
             navigate("/apply")
             return
         }
 
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/config/${params.subteamId}`, { credentials: 'include' })
+        // Fetch team data with all subteam configs
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/teams/${params.teamId}`, { credentials: 'include' })
             .then(async (res) => {
-                const team = await res.json()
-                setSubteam(team)
-                if (team.roles?.length === 1) {
-                    setSelectedRoles([team.roles[0]])
+                if (!res.ok) {
+                    const err = await res.json()
+                    toast.error(err.message || "Failed to load team data")
+                    navigate("/apply")
+                    return
                 }
+
+                const data: ATSTeamData = await res.json()
+                setTeamData(data)
+
+                // Build flat role list and mapping
+                const roles: string[] = []
+                const mapping = new Map<string, string>()
+
+                data.recruitingSubteams.forEach(subteam => {
+                    subteam.roles.forEach(role => {
+                        roles.push(role)
+                        mapping.set(role, subteam.subteamPk)  // Map role -> subteam (hidden from user)
+                    })
+                })
+
+                setAllRoles(roles)
+                setRoleToSubteamMap(mapping)
             })
-    }, [params.subteamId, applications, navigate])
+            .catch(err => {
+                console.error(err)
+                toast.error("Failed to load team information")
+                navigate("/apply")
+            })
+    }, [params.teamId, applications, navigate])
 
-    // Autofill parent team interest question
+    // Autofill team interest question if previously applied to this team
     React.useEffect(() => {
-        if (!subteam || !applications) return;
+        if (!teamData || !applications) return;
 
-        const parentName = subteam.parentInfo.friendlyName;
-        const questionKey = `Why are you interested in ${parentName}?`;
+        const teamName = teamData.teamInfo.friendlyName;
+        const questionKey = `Why are you interested in ${teamName}?`;
 
         // Check if we already have a value entered by the user
         if (responses[questionKey]) return;
 
-        // Verify if the applicant has applied to another subteam under the same parent team
+        // Check if applicant previously applied to this team
         const previousApp = applications.find(
-            app => app.parentTeamName === parentName && app.responses && app.responses[questionKey]
+            app => app.teamPk === teamData.teamPk && app.responses && app.responses[questionKey]
         );
 
         if (previousApp) {
@@ -544,13 +808,14 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                 [questionKey]: previousApp.responses[questionKey]
             }));
         }
-    }, [subteam, applications]);
+    }, [teamData, applications, responses]);
 
     const handleApply = async () => {
         if (selectedRoles.length === 0) {
             return toast.error("Please select at least one role.")
         }
 
+        // Validate profile fields
         for (const field of PERSONAL_INFO_FIELDS) {
             if (field.required && !profile[field.id]) {
                 return toast.error(`Please provide your ${field.label.toLowerCase()}.`)
@@ -563,29 +828,27 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                 }
             }
 
-            if (field.id === "linkedinUrl" && profile[field.id]?.trim()) {
-                if (!profile[field.id]!.includes("linkedin.com")) {
-                    return toast.error("Please enter a valid LinkedIn URL.")
+            if ((field.id === "linkedinUrl" || field.id === "githubUrl") && profile[field.id]?.trim()) {
+                try {
+                    new URL(profile[field.id]!)
+                } catch {
+                    return toast.error(`Please enter a valid URL for ${field.id === "linkedinUrl" ? "LinkedIn" : "GitHub"}.`)
                 }
-                try { new URL(profile[field.id]!) } catch { return toast.error("Please enter a valid URL for LinkedIn.") }
-            }
-
-            if (field.id === "githubUrl" && profile[field.id]?.trim()) {
-                if (!profile[field.id]!.includes("github.com")) {
-                    return toast.error("Please enter a valid GitHub URL.")
-                }
-                try { new URL(profile[field.id]!) } catch { return toast.error("Please enter a valid URL for GitHub.") }
             }
         }
 
-        if (subteam) {
-            const parentInterestKey = `Why are you interested in ${subteam.parentInfo.friendlyName}?`
-            if (!responses[parentInterestKey]) {
-                return toast.error(`Please explain why you are interested in ${subteam.parentInfo.friendlyName}.`)
+        // Validate team question and role-specific questions
+        if (teamData) {
+            const teamQuestionKey = `Why are you interested in ${teamData.teamInfo.friendlyName}?`
+            if (!responses[teamQuestionKey]) {
+                return toast.error(`Please explain why you are interested in ${teamData.teamInfo.friendlyName}.`)
             }
 
+            // Validate role-specific questions
             for (const role of selectedRoles) {
-                const questions = subteam.roleSpecificQuestions[role] || []
+                const subteamPk = roleToSubteamMap.get(role)!
+                const subteam = teamData.recruitingSubteams.find(s => s.subteamPk === subteamPk)
+                const questions = subteam?.roleSpecificQuestions[role] || []
                 for (const q of questions) {
                     if (!responses[q]) {
                         return toast.error(`Please answer: ${q}`)
@@ -602,8 +865,8 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
-                    subteamPk: params.subteamId,
-                    roles: selectedRoles,
+                    teamPk: params.teamId,
+                    rolePreferences: selectedRoles, // Send ordered roles directly
                     profile: profile,
                     responses: responses,
                 })
@@ -611,10 +874,10 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
 
             if (response.ok) {
                 toast.success("Application submitted successfully!")
-                navigate("/apply") // Send them back to the list
+                navigate("/apply")
             } else {
                 const err = await response.json()
-                toast.error("Submission failed", { description: err.error })
+                toast.error("Submission failed", { description: err.message || err.error })
             }
         } catch (error) {
             toast.error("An error occurred while submitting.")
@@ -685,12 +948,8 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                 </Button>
 
                 <div className="flex flex-col gap-2">
-                    <h1 className='text-4xl font-extrabold tracking-tight text-foreground'>{subteam?.parentInfo.friendlyName}</h1>
+                    <h1 className='text-4xl font-extrabold tracking-tight text-foreground'>{teamData?.teamInfo.friendlyName}</h1>
                     <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="px-3 py-1 text-sm font-semibold bg-primary/10 text-primary border-none">
-                            {subteam?.subteamInfo.friendlyName} Subteam
-                        </Badge>
-                        <span className="text-muted-foreground/40">•</span>
                         <span className="text-muted-foreground text-sm font-medium">Application Form</span>
                     </div>
                 </div>
@@ -701,240 +960,231 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                 <div className="lg:col-span-2 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
 
                     {/* About Section */}
-                    <Card className="shadow-sm border-border/50">
-                        <CardHeader className="bg-muted/30 pb-4">
-                            <CardTitle className='text-lg font-bold flex items-center gap-2'>
-                                <InfoIcon className="h-5 w-5 text-primary" />
+                    <Card className="shadow-sm border-border/50 overflow-hidden">
+                        <CardHeader className="pt-0 flex bg-muted/40" style={{ padding: "15px" }}>
+                            <CardTitle className='pt-0 text-sm font-bold flex items-center gap-2.5 text-foreground/80'>
+                                <InfoIcon className="h-4 w-4 text-primary" />
                                 About this Team
                             </CardTitle>
                         </CardHeader>
-                        <CardContent className="pt-6">
-                            <p className="text-muted-foreground leading-relaxed text-sm">{subteam?.parentInfo.description}</p>
+                        <CardContent>
+                            <p className="text-muted-foreground leading-relaxed text-sm">{teamData?.teamInfo.description}</p>
                         </CardContent>
                     </Card>
 
                     {/* Role Selection */}
-                    <Card className="shadow-sm border-border/50">
-                        <CardHeader className="bg-muted/30 pb-4">
-                            <CardTitle className='text-lg font-bold flex items-center gap-2'>
+                    <Card className="shadow-sm border-border/50 overflow-hidden">
+                        <CardHeader className="pt-0 flex bg-muted/40" style={{ padding: "15px" }}>
+                            <CardTitle className='pt-0 text-sm font-bold flex items-center gap-2.5 text-foreground/80'>
                                 <TargetIcon className="h-5 w-5 text-primary" />
-                                Preferred Roles
+                                <div className="flex flex-col">
+                                    <p>Preferred Roles</p>
+                                    <p className='text-xs text-muted-foreground'>Select one or more roles you are interested in.</p>
+                                </div>
                             </CardTitle>
-                            <CardDescription className="text-xs">Select one or more roles you are interested in.</CardDescription>
+                            <CardDescription className="text-xs"></CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-6">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                {subteam?.roles.map((role) => (
-                                    <Label
-                                        key={role}
-                                        htmlFor={role}
-                                        className={`flex items-start gap-4 p-4 rounded-xl border transition-all cursor-pointer hover:bg-muted/50 ${selectedRoles.includes(role) ? 'border-primary bg-primary/5 ring-1 ring-primary shadow-sm' : 'border-border/60 bg-card'}`}
-                                    >
-                                        <Checkbox
-                                            id={role}
-                                            className="mt-1"
-                                            checked={selectedRoles.includes(role)}
-                                            onCheckedChange={(checked) => {
-                                                if (checked) setSelectedRoles(prev => [...prev, role])
-                                                else setSelectedRoles(prev => prev.filter(r => r !== role))
-                                            }}
-                                        />
-                                        <div className="space-y-1">
-                                            <span className="font-bold text-sm block">{role}</span>
-                                            <span className="text-[11px] text-muted-foreground leading-tight block">
-                                                Click to select the {role} role.
-                                            </span>
-                                        </div>
-                                    </Label>
-                                ))}
-                            </div>
+                        <CardContent>
+                            <RolePreferenceSelector
+                                allRoles={allRoles}
+                                selectedRoles={selectedRoles}
+                                onChange={setSelectedRoles}
+                            />
                         </CardContent>
                     </Card>
 
                     {/* Personal Information */}
-                    <Card className="shadow-sm border-border/50">
-                        <CardHeader className="bg-muted/30 pb-4">
-                            <CardTitle className='text-lg font-bold flex items-center gap-2'>
+                    <Card className="shadow-sm border-border/50 overflow-hidden">
+                        <CardHeader className="pt-0 flex bg-muted/40" style={{ padding: "15px" }}>
+                            <CardTitle className='pt-0 text-sm font-bold flex items-center gap-2.5 text-foreground/80'>
                                 <UserIcon className="h-5 w-5 text-primary" />
-                                Personal Details
+                                <div className="flex flex-col">
+                                    <p>Basic Information</p>
+                                    <p className='text-xs text-muted-foreground'>We'd love to know a bit about you!</p>
+                                </div>
                             </CardTitle>
-                            <CardDescription className="text-xs">These details will be used across all your applications.</CardDescription>
+                            <CardDescription className="text-xs"></CardDescription>
                         </CardHeader>
-                        <CardContent className="pt-6 space-y-6">
-                            {PERSONAL_INFO_FIELDS.map((field) => (
-                                <div key={field.id} className="space-y-2">
-                                    <Label htmlFor={field.id} className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
-                                        {field.label}
-                                        {field.required && <span className="text-destructive font-bold">*</span>}
+                        <CardContent className="space-y-6">
+                            {/* Resume Upload - Simplified and moved to top */}
+                            <div className="space-y-2">
+                                <div className="flex items-center">
+                                    <Label htmlFor="resumeUrl" className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
+                                        Resume (PDF)
+                                        <span className="text-destructive font-bold">*</span>
                                     </Label>
+                                    {profile.resumeUrl && (
+                                        <div className="flex ml-4 items-center gap-1.5 text-[11px] text-green-600 font-bold">
+                                            <CheckCircle2 className="h-3.5 w-3.5" />
+                                            Uploaded
+                                        </div>
+                                    )}
+                                </div>
 
-                                    {field.id === "resumeUrl" ? (
-                                        <div className="flex flex-col gap-3 p-4 border border-border/60 rounded-xl bg-muted/10">
-                                            <div className="flex flex-wrap items-center gap-4">
-                                                <Input
-                                                    id={field.id}
-                                                    type="file"
-                                                    accept=".pdf"
-                                                    onChange={handleResumeUpload}
-                                                    disabled={isUploading}
-                                                    className="hidden"
-                                                />
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    disabled={isUploading}
-                                                    onClick={() => document.getElementById(field.id)?.click()}
-                                                    className="shadow-sm font-bold bg-background"
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex items-center gap-3">
+                                        <Input
+                                            id="resumeUrl"
+                                            type="file"
+                                            accept=".pdf"
+                                            onChange={handleResumeUpload}
+                                            disabled={isUploading}
+                                            className="hidden"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={isUploading}
+                                            onClick={() => document.getElementById("resumeUrl")?.click()}
+                                            className="font-bold bg-background h-9 px-4"
+                                        >
+                                            {isUploading ? <Loader2Icon className="animate-spin mr-2 h-4 w-4" /> : <UploadCloud className="mr-2 h-4 w-4 text-primary" />}
+                                            {profile.resumeUrl ? "Update Resume" : "Upload Resume"}
+                                        </Button>
+
+                                        {profile.resumeUrl && (
+                                            <Button variant="link" size="sm" asChild className="h-9 px-0 text-primary font-bold">
+                                                <a
+                                                    href={profile.resumeUrl.startsWith("http") ? profile.resumeUrl : `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/download?key=${encodeURIComponent(profile.resumeUrl)}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="flex items-center gap-1.5"
                                                 >
-                                                    {isUploading ? <Loader2Icon className="animate-spin mr-2 h-4 w-4" /> : <UploadCloud className="mr-2 h-4 w-4 text-primary" />}
-                                                    {profile.resumeUrl ? "Update PDF" : "Upload Resume (PDF)"}
-                                                </Button>
-                                                {profile.resumeUrl && (
-                                                    <div className="flex items-center gap-1.5 text-sm text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full border border-green-100">
-                                                        <CheckCircle2 className="h-4 w-4" />
-                                                        Uploaded
+                                                    View Uploaded Resume
+                                                    <ExternalLinkIcon className="h-3.5 w-3.5" />
+                                                </a>
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Other Personal Info Fields */}
+                            {PERSONAL_INFO_FIELDS.filter(f => f.id !== "resumeUrl").map((field) => {
+                                const fieldValue = profile[field.id] ?? "";
+
+                                return (
+                                    <div key={field.id} className="space-y-2">
+                                        <Label htmlFor={field.id} className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
+                                            {field.label}
+                                            {field.required && <span className="text-destructive font-bold">*</span>}
+                                        </Label>
+
+                                        {field.type === "select" ? (
+                                            <Select
+                                                value={fieldValue.toString()}
+                                                onValueChange={(value) => setProfile((prev) => ({ ...prev, [field.id]: value }))}
+                                            >
+                                                <SelectTrigger className="w-full bg-background">
+                                                    <SelectValue placeholder="Select an option" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {field.options?.map((option) => (
+                                                        <SelectItem key={option} value={option}>{option}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        ) : field.multiline ? (
+                                            <div className="space-y-2">
+                                                <Textarea
+                                                    id={field.id}
+                                                    placeholder={field.placeholder ?? "Enter your answer"}
+                                                    value={fieldValue.toString()}
+                                                    className="min-h-[140px] resize-none focus-visible:ring-primary shadow-sm bg-background mt-2"
+                                                    onChange={(e) => setProfile((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                                                />
+                                                {field.id === "whyAppDev" && (
+                                                    <div className="flex justify-between items-center px-1">
+                                                        <span className="text-[10px] text-muted-foreground italic">Tell us what motivates you to join.</span>
+                                                        <Badge variant="outline" className={`text-[10px] tabular-nums font-bold border-none bg-muted/30 ${((fieldValue.toString().split(/\s+/).filter(Boolean).length || 0) > 200) ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                                            {fieldValue.toString().split(/\s+/).filter(Boolean).length || 0} / 200 words
+                                                        </Badge>
                                                     </div>
                                                 )}
                                             </div>
-                                            {profile.resumeUrl && (
-                                                <div className="flex items-center gap-2 text-xs">
-                                                    <FileIcon className="h-3 w-3 text-muted-foreground" />
-                                                    <a
-                                                        href={profile.resumeUrl.startsWith("http") ? profile.resumeUrl : `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/download?key=${encodeURIComponent(profile.resumeUrl)}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-primary hover:underline font-bold"
-                                                    >
-                                                        Review Uploaded File
-                                                    </a>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : field.type === "select" ? (
-                                        <Select
-                                            value={profile[field.id]?.toString() ?? ""}
-                                            onValueChange={(value) =>
-                                                setProfile((prev) => ({ ...prev, [field.id]: value }))
-                                            }
-                                        >
-                                            <SelectTrigger className="w-full bg-background">
-                                                <SelectValue placeholder="Select an option" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {field.options?.map((option) => (
-                                                    <SelectItem key={option} value={option}>
-                                                        {option}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    ) : field.multiline ? (
-                                        <div className="space-y-2">
-                                            <Textarea
+                                        ) : (
+                                            <Input
                                                 id={field.id}
+                                                type={field.type ?? "text"}
                                                 placeholder={field.placeholder ?? "Enter your answer"}
-                                                value={profile[field.id] ?? ""}
-                                                className="min-h-[140px] resize-none focus-visible:ring-primary shadow-sm bg-background"
-                                                onChange={(e) =>
-                                                    setProfile((prev) => ({ ...prev, [field.id]: e.target.value }))
-                                                }
+                                                value={fieldValue.toString()}
+                                                className="focus-visible:ring-primary shadow-sm bg-background mt-2"
+                                                onChange={(e) => setProfile((prev) => ({ ...prev, [field.id]: e.target.value }))}
                                             />
-                                            {field.id === "whyAppDev" && (
-                                                <div className="flex justify-between items-center px-1">
-                                                    <span className="text-[10px] text-muted-foreground italic">Tell us what motivates you to join.</span>
-                                                    <Badge variant="outline" className={`text-[10px] tabular-nums font-bold border-none bg-muted/30 ${((profile[field.id]?.split(/\s+/).filter(Boolean).length || 0) > 200) ? 'text-destructive' : 'text-muted-foreground'}`}>
-                                                        {profile[field.id]?.split(/\s+/).filter(Boolean).length || 0} / 200 words
-                                                    </Badge>
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <Input
-                                            id={field.id}
-                                            type={field.type ?? "text"}
-                                            placeholder={field.placeholder ?? "Enter your answer"}
-                                            value={profile[field.id] ?? ""}
-                                            className="focus-visible:ring-primary shadow-sm bg-background"
-                                            onChange={(e) =>
-                                                setProfile((prev) => ({ ...prev, [field.id]: e.target.value }))
-                                            }
-                                        />
-                                    )}
-                                </div>
-                            ))}
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </CardContent>
                     </Card>
 
                     {/* Question Sections */}
-                    {selectedRoles.length > 0 && (
-                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                            {/* Team Interest */}
-                            <Card className="shadow-sm border-border/50">
-                                <CardHeader className="bg-muted/30 pb-4">
-                                    <CardTitle className='text-lg font-bold flex items-center gap-2 text-foreground'>
-                                        <Users2Icon className="h-5 w-5 text-primary" />
-                                        Team Fit
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent className="pt-6">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="parent-team-interest" className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
-                                            Why are you interested in {subteam?.parentInfo.friendlyName}?
-                                            <span className="text-destructive font-bold">*</span>
-                                        </Label>
-                                        <Textarea
-                                            id="parent-team-interest"
-                                            placeholder="Tell us what draws you to this specific team..."
-                                            className="min-h-[120px] resize-none shadow-sm bg-background focus-visible:ring-primary"
-                                            value={responses[`Why are you interested in ${subteam?.parentInfo.friendlyName}?`] ?? ""}
-                                            onChange={(e) =>
-                                                setResponses((prev) => ({
-                                                    ...prev,
-                                                    [`Why are you interested in ${subteam?.parentInfo.friendlyName}?`]: e.target.value
-                                                }))
-                                            }
-                                        />
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        {/* Team Interest */}
+                        <Card className="shadow-sm border-border/50 overflow-hidden">
+                            <CardHeader className="pt-0 flex bg-muted/40" style={{ padding: "15px" }}>
+                                <CardTitle className='pt-0 text-sm font-bold flex items-center gap-2.5 text-foreground/80'>
+                                    <Users2Icon className="h-5 w-5 text-primary" />
+                                    <div className="flex flex-col">
+                                        <p>Team Fit & Technical Evaluation</p>
+                                        <p className='text-xs text-muted-foreground'>Share your skills and expectations</p>
                                     </div>
-                                </CardContent>
-                            </Card>
+                                </CardTitle>
+                                <CardDescription className="text-xs"></CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex flex-col gap-4 pt-0">
+                                <div className="space-y-2">
+                                    <Label htmlFor="parent-team-interest" className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
+                                        Why are you interested in {teamData?.teamInfo.friendlyName}?
+                                        <span className="text-destructive font-bold">*</span>
+                                    </Label>
+                                    <Textarea
+                                        id="parent-team-interest"
+                                        placeholder="Tell us what draws you to this specific team..."
+                                        className="min-h-[120px] resize-none shadow-sm bg-background focus-visible:ring-primary"
+                                        value={responses[`Why are you interested in ${teamData?.teamInfo.friendlyName}?`] ?? ""}
+                                        onChange={(e) =>
+                                            setResponses((prev) => ({
+                                                ...prev,
+                                                [`Why are you interested in ${teamData?.teamInfo.friendlyName}?`]: e.target.value
+                                            }))
+                                        }
+                                    />
+                                </div>
 
-                            {/* Role Specifics */}
-                            {Object.entries(subteam?.roleSpecificQuestions ?? {}).filter(
-                                ([role]) => selectedRoles.includes(role)
-                            ).map(([role, questions]) => (
-                                <Card key={role} className="shadow-sm border-border/50">
-                                    <CardHeader className="bg-muted/30 pb-4">
-                                        <CardTitle className='text-lg font-bold flex items-center gap-2'>
-                                            <AwardIcon className="h-5 w-5 text-primary" />
-                                            {role} Specifics
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="pt-6 space-y-8">
-                                        {questions.map((question, idx) => (
-                                            <div key={`${role}-${idx}`} className="space-y-2">
-                                                <Label htmlFor={`${role}-${idx}`} className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
-                                                    {question}
-                                                    <span className="text-destructive font-bold">*</span>
-                                                </Label>
-                                                <Textarea
-                                                    id={`${role}-${idx}`}
-                                                    placeholder="Enter your detailed response..."
-                                                    className="min-h-[120px] resize-none shadow-sm bg-background focus-visible:ring-primary"
-                                                    value={responses[question] ?? ""}
-                                                    onChange={(e) =>
-                                                        setResponses((prev) => ({
-                                                            ...prev,
-                                                            [question]: e.target.value
-                                                        }))
-                                                    }
-                                                />
-                                            </div>
-                                        ))}
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    )}
+                                {teamData && selectedRoles.map(role => {
+                                    const subteamPk = roleToSubteamMap.get(role)!
+                                    const subteam = teamData.recruitingSubteams.find(s => s.subteamPk === subteamPk)
+                                    const roleQuestions = subteam?.roleSpecificQuestions[role] || []
+
+                                    if (roleQuestions.length === 0) return null
+
+                                    return (
+                                        <>
+                                            {roleQuestions.map((question, idx) => (
+                                                <div key={idx} className="space-y-2">
+                                                    <Label htmlFor={`q-${role}-${idx}`} className="text-sm font-bold flex items-center gap-1.5 text-foreground/80">
+                                                        {question}
+                                                        <span className="text-destructive font-bold">*</span>
+                                                    </Label>
+                                                    <Textarea
+                                                        id={`q-${role}-${idx}`}
+                                                        placeholder="Enter your response..."
+                                                        className="min-h-[120px] resize-none shadow-sm bg-background focus-visible:ring-primary"
+                                                        value={responses[question] ?? ""}
+                                                        onChange={(e) =>
+                                                            setResponses((prev) => ({ ...prev, [question]: e.target.value }))
+                                                        }
+                                                    />
+                                                </div>
+                                            ))}
+                                        </>
+                                    )
+                                })}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </div>
 
                 {/* Right Side: Sticky Summary / Submit Card */}
@@ -948,9 +1198,9 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                             </h4>
                             <ul className="space-y-3">
                                 {[
-                                    "Resume reflects recent projects",
+                                    "Uploaded your most recent resume",
                                     "LinkedIn/GitHub links are working",
-                                    "Responses address the specific role"
+                                    "Responses address the specific roles"
                                 ].map((tip, i) => (
                                     <li key={i} className="flex gap-2 text-[11px] text-muted-foreground leading-snug">
                                         <div className="h-1.5 w-1.5 rounded-full bg-primary/40 mt-1 shrink-0" />
@@ -961,34 +1211,31 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                         </div>
 
                         <Card className="shadow-lg border-primary/20 overflow-hidden ring-1 ring-primary/10">
-                            <CardHeader className="bg-primary/5 pb-4">
-                                <CardTitle className='text-base font-bold text-primary'>Application Summary</CardTitle>
+                            <CardHeader className="pt-0 flex bg-primary/5" style={{ padding: "15px" }}>
+                                <CardTitle className='pt-0 text-sm font-bold flex items-center gap-2.5 text-primary'>
+                                    <NotepadText />
+                                    Application Summary
+                                </CardTitle>
                             </CardHeader>
-                            <CardContent className="pt-6 space-y-4">
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-muted-foreground font-medium">Main Team</span>
-                                        <span className="font-bold text-foreground">{subteam?.parentInfo.friendlyName}</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="text-muted-foreground font-medium">Focus Area</span>
-                                        <span className="font-bold text-foreground">{subteam?.subteamInfo.friendlyName}</span>
+                            <CardContent>
+                                <div className="space-y-2">
+                                    <div className="flex flex-col text-sm">
+                                        <span className="text-muted-foreground">Team</span>
+                                        <span className="font-bold text-foreground">{teamData?.teamInfo.friendlyName}</span>
                                     </div>
 
-                                    <Separator className="bg-border/60" />
-
-                                    <div className="space-y-2">
-                                        <span className="text-[10px] text-muted-foreground block uppercase tracking-widest font-bold">Target Roles</span>
+                                    <div>
+                                        <span className="text-muted-foreground text-sm">Selected Roles</span>
                                         {selectedRoles.length > 0 ? (
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap gap-2 mt-2">
                                                 {selectedRoles.map(role => (
-                                                    <Badge key={role} className="bg-primary/10 text-primary border-none text-sm font-bold px-2 py-0.5">
+                                                    <Badge key={role} className="bg-primary/10 text-primary">
                                                         {role}
                                                     </Badge>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <div className="text-[11px] text-destructive font-bold flex items-center gap-1.5 bg-destructive/5 p-2 rounded-lg border border-destructive/10">
+                                            <div className="text-[11px] mt-2 text-destructive font-bold flex items-center gap-1.5 bg-destructive/5 p-2 rounded-lg border border-destructive/10">
                                                 <InfoIcon className="h-3 w-3" />
                                                 Please select at least one role
                                             </div>
@@ -996,7 +1243,7 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                                     </div>
                                 </div>
 
-                                <div className="pt-4">
+                                <div className="pt-6">
                                     <Button
                                         onClick={handleApply}
                                         disabled={isSubmitting || selectedRoles.length === 0}
@@ -1006,7 +1253,7 @@ const ATSApplyPage = ({ applications, profile: parentProfile, onProfileUpdate }:
                                         Submit Application
                                     </Button>
                                     <p className="text-[10px] text-center text-muted-foreground mt-3 leading-relaxed">
-                                        Ensure all required fields are filled before submitting.
+                                        We'll get back to you within 10 days!
                                     </p>
                                 </div>
                             </CardContent>
@@ -1049,88 +1296,83 @@ const ATSApplyList = ({ applications }: { applications: ATSApplication[] }) => {
                 <p className="text-muted-foreground">Join one of our world-class teams and build something amazing.</p>
             </div>
 
-            <div className="grid grid-cols-1 gap-6">
-                {teams.map((team) => (
-                    <Card key={team.teamPk} className="overflow-hidden border-border/50 shadow-sm hover:shadow-md transition-shadow">
-                        <CardHeader className="bg-muted/30 border-b pb-6">
-                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="bg-primary/10 p-3 rounded-2xl">
-                                        <UsersRound className="h-6 w-6 text-primary" />
+            <Accordion type="single" collapsible className="w-full space-y-4">
+                {teams.map((team) => {
+                    const totalRoles = team.recruitingSubteamPks.reduce((acc, pk) => acc + (team.subteamInfo[pk]?.recruitmentInfo?.roles.length || 0), 0)
+                    const isRecruiting = team.recruitingSubteamPks.length > 0
+                    const hasApplied = applications.some(app => app.teamPk === team.teamPk)
+
+                    return (
+                        <AccordionItem
+                            key={team.teamPk}
+                            value={team.teamPk}
+                            className="border border-border/50 rounded-xl bg-card shadow-sm px-2 data-[state=open]:ring-1 data-[state=open]:ring-primary/20 transition-all"
+                        >
+                            <AccordionTrigger className="w-full hover:no-underline px-4 py-4 items-center [&>svg]:translate-y-0">
+                                <div className="flex items-center gap-4 w-full text-left">
+                                    <div className="bg-primary/10 p-2 rounded-lg shrink-0">
+                                        <UsersRound className="h-5 w-5 text-primary" />
                                     </div>
-                                    <div className="space-y-1">
-                                        <CardTitle className="text-2xl font-bold flex items-center gap-3">
-                                            {team.teamInfo.friendlyName}
-                                            {applications.some(app => team.recruitingSubteamPks.includes(app.subteamPk)) && (
-                                                <Badge className="bg-green-500/10 text-green-600 border-green-200/50 hover:bg-green-500/10 gap-1 font-bold">
+                                    <div className="flex flex-col items-start min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-lg font-bold">
+                                                {team.teamInfo.friendlyName}
+                                            </span>
+                                            {hasApplied && (
+                                                <Badge className="bg-green-500/10 text-green-600 border-none font-bold text-[10px] h-5 px-1.5 flex gap-1">
                                                     <CheckCircle2 className="h-3 w-3" />
                                                     Applied
                                                 </Badge>
                                             )}
-                                        </CardTitle>
-                                        <CardDescription className="text-sm font-medium flex items-center gap-2">
-                                            <Badge variant="outline" className="text-[10px] uppercase tracking-wider font-bold h-5">
-                                                {team.teamInfo.seasonText}
-                                            </Badge>
-                                        </CardDescription>
+                                        </div>
+                                        <p className="text-muted-foreground text-md font-medium line-clamp-1 pr-4">
+                                            {team.teamInfo.description}
+                                        </p>
+                                    </div>
+
+                                    <div className="ml-auto mr-4 flex items-center gap-4 hidden sm:flex shrink-0">
+                                        {isRecruiting ? (
+                                            <div className="flex flex-col items-end">
+                                                <Badge variant="secondary" className="font-bold">
+                                                    {totalRoles} {totalRoles === 1 ? "Role" : "Roles"} Available
+                                                </Badge>
+                                            </div>
+                                        ) : (
+                                            <Badge variant="outline" className="text-muted-foreground">Not Recruiting</Badge>
+                                        )}
                                     </div>
                                 </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <p className="text-muted-foreground leading-relaxed mb-8">{team.teamInfo.description}</p>
+                            </AccordionTrigger>
+                            <AccordionContent className="pb-4 pt-1 px-4">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pt-2">
+                                    <div className='flex-grow ml-[3.5rem]'>
+                                        <p className='text-muted-foreground'>Available Roles</p>
+                                        <div className='flex flex-wrap gap-1.5 mt-2'>
+                                            {team.recruitingSubteamPks.flatMap(pk =>
+                                                team.subteamInfo[pk]?.recruitmentInfo?.roles || []
+                                            ).map((role, idx) => (
+                                                <Badge variant="secondary" key={idx}>
+                                                    {role}
+                                                </Badge>
+                                            ))}
+                                        </div>
+                                    </div>
 
-                            <div className="space-y-6">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="text-xs font-bold uppercase tracking-widest text-foreground/60">Recruiting Subteams</h4>
-                                    <Separator className="flex-1" />
+                                    {/* Single apply button for the team */}
+                                    <Button
+                                        variant={hasApplied ? "outline" : "outline"}
+                                        className={`self-end px-8 ${hasApplied ? 'w-full sm:w-auto border-dashed' : 'w-full sm:w-auto'}`}
+                                        onClick={() => hasApplied ? navigate(`/apply/applications`) : navigate(`./${team.teamPk}`)}
+                                    >
+                                        {hasApplied ? "View Application" : `Apply to ${team.teamInfo.friendlyName}`}
+                                        <ChevronLeftIcon className="h-4 w-4 rotate-180" />
+                                    </Button>
                                 </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {team.recruitingSubteamPks.map((subteamPk) => {
-                                        const subteamInfo = team.subteamInfo[subteamPk]
-                                        const isApplied = applications.some(app => app.subteamPk === subteamPk)
-
-                                        return (
-                                            <div
-                                                key={subteamPk}
-                                                className={`p-5 rounded-2xl border transition-all ${isApplied ? 'bg-green-500/5 border-green-200/50' : 'bg-muted/20 border-border/40 hover:border-primary/30 hover:bg-muted/40'}`}
-                                            >
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <h5 className="font-bold text-lg">{subteamInfo.friendlyName}</h5>
-                                                    {isApplied && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-                                                </div>
-
-                                                <p className="text-sm text-muted-foreground leading-relaxed mb-4 line-clamp-2">
-                                                    {subteamInfo.description}
-                                                </p>
-
-                                                <div className="flex flex-wrap gap-1.5 mb-5">
-                                                    {subteamInfo.recruitmentInfo?.roles.map((roleName) => (
-                                                        <Badge key={roleName} variant="secondary" className="text-sm font-bold px-2 py-0.5 bg-background/50">
-                                                            {roleName}
-                                                        </Badge>
-                                                    ))}
-                                                </div>
-
-                                                <Button
-                                                    onClick={() => isApplied ? navigate(`/apply/applications`) : navigate(`./${subteamPk}`)}
-                                                    variant={isApplied ? "outline" : "default"}
-                                                    size="sm"
-                                                    className={`w-full font-bold shadow-sm ${!isApplied ? 'shadow-primary/20' : ''}`}
-                                                >
-                                                    {isApplied ? "View My Application" : `Apply to ${subteamInfo.friendlyName}`}
-                                                    {!isApplied && <ExternalLinkIcon className="ml-2 h-3 w-3" />}
-                                                </Button>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
-            </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    )
+                })}
+            </Accordion>
         </div>
     )
 }

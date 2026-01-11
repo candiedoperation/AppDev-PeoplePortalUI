@@ -11,7 +11,7 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon } from "lucide-react";
+import { Loader2Icon, ExternalLinkIcon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -27,6 +27,27 @@ interface SubteamATSConfig {
     roles: string[]
     roleSpecificQuestions: { [key: string]: string[] },
     isRecruiting: boolean
+}
+
+// Type definition for applications returned from backend
+interface SubteamPreference {
+    subteamPk: string;
+    roles: string[];
+}
+
+interface KanbanApplicationCard {
+    id: string;
+    name: string;
+    column: string;
+    applicantId: string;
+    email: string;
+    profile: { [key: string]: string };
+    responses: { [key: string]: string };
+    subteamPreferences: SubteamPreference[];  // Team-level applications
+    hiredSubteamPk?: string;
+    hiredRole?: string;
+    appliedAt: string;
+    [key: string]: unknown;  // Index signature for Kanban compatibility
 }
 
 export const DashboardTeamRecruitment = () => {
@@ -47,8 +68,8 @@ export const DashboardTeamRecruitment = () => {
     const [recruitmentEnabled, setRecruitmentEnabled] = React.useState<{ [key: string]: boolean }>({})
     const [roleSpecQuestions, setRoleSpecQuestions] = React.useState<{ [key: string]: { [key: string]: string[] } }>({})
 
-    const [applications, setApplications] = React.useState<any[]>([])
-    const [selectedApplication, setSelectedApplication] = React.useState<any | null>(null)
+    const [applications, setApplications] = React.useState<KanbanApplicationCard[]>([])  // UPDATED type
+    const [selectedApplication, setSelectedApplication] = React.useState<KanbanApplicationCard | null>(null)  // UPDATED type
     const [applicantUrls, setApplicantUrls] = React.useState<any | null>(null)
     const [otherApplications, setOtherApplications] = React.useState<any[]>([])
     const [dragStartColumn, setDragStartColumn] = React.useState<string | null>(null);
@@ -134,6 +155,8 @@ export const DashboardTeamRecruitment = () => {
                 })
                 .catch(err => console.error("Failed to fetch applicant history", err))
         }
+
+        console.log(selectedApplication)
     }, [selectedApplication])
 
     // Fetch applications from MongoDB
@@ -259,17 +282,26 @@ export const DashboardTeamRecruitment = () => {
                                 <KanbanBoard id={col.id} className="min-w-[250px] ring-inset">
                                     <KanbanHeader>{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
                                     <KanbanCards id={col.id}>
-                                        {(item) => (
-                                            <KanbanCard id={item.id} name={item.name} column={item.column} className="bg-background cursor-grab border-border">
-                                                <div className="flex items-center justify-between w-full">
-                                                    <div className="flex flex-col gap-1">
-                                                        <span className="font-semibold">{item.name}</span>
-                                                        <span className="text-xs text-muted-foreground">{item.role as string}</span>
+                                        {(item) => {
+                                            const appItem = item as unknown as KanbanApplicationCard;
+                                            return (
+                                                <KanbanCard id={item.id} name={item.name} column={item.column} className="bg-background cursor-grab border-border">
+                                                    <div className="flex items-center justify-between w-full">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-semibold">{item.name}</span>
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {appItem.subteamPreferences && appItem.subteamPreferences.map((pref, idx) => (
+                                                                    <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                                                        {pref.roles.join('/')}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedApplication(item as unknown as KanbanApplicationCard); }}>Open</Button>
                                                     </div>
-                                                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedApplication(item); }}>Open</Button>
-                                                </div>
-                                            </KanbanCard>
-                                        )}
+                                                </KanbanCard>
+                                            );
+                                        }}
                                     </KanbanCards>
                                 </KanbanBoard>
                             )}
@@ -374,13 +406,118 @@ export const DashboardTeamRecruitment = () => {
             <Dialog open={selectedApplication !== null} onOpenChange={(open) => !open && setSelectedApplication(null)}>
                 <DialogContent className="!max-w-[95vw] !w-[95vw] !h-[95vh] p-0 flex gap-0">
 
-                    {/* Left Sidebar: Other Applications */}
-                    <div className="w-64 bg-muted/20 border-r p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
+                    {/* Left Sidebar: Application Information */}
+                    <div className="w-96 bg-muted/20 border-r p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
                         <div>
-                            <h3 className="font-semibold text-lg">Other Apps</h3>
-                            <p className="text-xs text-muted-foreground">Application history for this candidate.</p>
+                            <h3 className="font-semibold text-lg">{selectedApplication?.name}</h3>
+                            <p className="text-sm text-muted-foreground">Application Information</p>
                         </div>
-                        <div className="flex flex-col gap-2">
+
+                        {/* Application Details */}
+                        <div className="flex flex-col gap-4">
+                            {/* Social Links */}
+                            <div className="flex gap-2">
+                                {selectedApplication?.profile?.linkedinUrl && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={() => window.open(selectedApplication.profile.linkedinUrl, '_blank')}
+                                    >
+                                        LinkedIn
+                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                    </Button>
+                                )}
+
+                                {selectedApplication?.profile?.githubUrl && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={() => window.open(selectedApplication.profile.githubUrl, '_blank')}
+                                    >
+                                        GitHub
+                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                    </Button>
+                                )}
+                            </div>
+
+                            {/* Subteam Preferences */}
+                            <div>
+                                <h4 className="text-sm font-semibold mb-2">Subteam Preferences</h4>
+                                <div className="flex flex-col gap-2">
+                                    {selectedApplication?.subteamPreferences?.map((pref, idx) => {
+                                        const subteamName = subTeams.find(s => s.pk === pref.subteamPk)?.attributes.friendlyName || pref.subteamPk;
+                                        return (
+                                            <div key={idx} className="bg-muted/50 p-2 rounded border border-border">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#{idx + 1}</span>
+                                                    <span className="text-xs font-medium text-muted-foreground">{subteamName}</span>
+                                                </div>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {pref.roles.map(role => (
+                                                        <span key={role} className="bg-primary/10 text-primary text-xs font-semibold px-2 py-1 rounded-md border border-primary/20">
+                                                            {role}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Show hired decision if made */}
+                                {selectedApplication?.hiredSubteamPk && (
+                                    <div className="mt-3 bg-green-50 border border-green-200 p-2 rounded">
+                                        <span className="text-xs font-semibold text-green-700">
+                                            Hired: {selectedApplication.hiredRole} ({subTeams.find(s => s.pk === selectedApplication.hiredSubteamPk)?.attributes.friendlyName})
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Why AppDev */}
+                            {selectedApplication?.profile?.whyAppDev && (
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Why AppDev?</h4>
+                                    <p className="whitespace-pre-wrap text-sm bg-muted/50 p-2 rounded leading-relaxed">{selectedApplication.profile.whyAppDev}</p>
+                                </div>
+                            )}
+
+                            {/* Additional Info */}
+                            {selectedApplication?.profile?.additionalInfo && (
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Additional Info</h4>
+                                    <p className="whitespace-pre-wrap text-sm bg-muted/50 p-2 rounded leading-relaxed">{selectedApplication.profile.additionalInfo}</p>
+                                </div>
+                            )}
+
+                            {/* Instagram Follow */}
+                            {selectedApplication?.profile?.instagramFollow && (
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Instagram Follow</h4>
+                                    <p className="text-sm bg-muted/50 p-2 rounded">{selectedApplication.profile.instagramFollow}</p>
+                                </div>
+                            )}
+
+                            {/* Role Specific Responses */}
+                            {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-semibold mb-2">Role Specific Responses</h4>
+                                    <div className="space-y-3">
+                                        {Object.entries(selectedApplication.responses).map(([question, answer]) => (
+                                            <div key={question} className="bg-muted/50 p-3 rounded">
+                                                <p className="text-sm font-medium mb-1">{question}</p>
+                                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{answer as string}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+
+                        {/* <div className="flex gap-2">
                             {otherApplications.map((app) => (
                                 <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
                                     <p className="font-medium truncate">
@@ -397,104 +534,47 @@ export const DashboardTeamRecruitment = () => {
                                 </div>
                             ))}
                             {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
-                        </div>
+                        </div> */}
                     </div>
 
                     {/* Right Content: Application Details */}
                     <div className="flex-1 p-6 overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle className="text-2xl">{selectedApplication?.name}</DialogTitle>
-                            <DialogDescription>Application Details</DialogDescription>
-                        </DialogHeader>
                         <div className="flex flex-col gap-6 mt-6">
-                            <div className="grid grid-cols-3 gap-4 border-b pb-4">
-                                <div>
-                                    <Label className="text-muted-foreground">Role</Label>
-                                    <p className="font-medium">{selectedApplication?.role}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Stage</Label>
-                                    <p className="font-medium capitalize">{selectedApplication?.column}</p>
-                                </div>
-                                <div>
-                                    <Label className="text-muted-foreground">Applied At</Label>
-                                    <p className="font-medium">{selectedApplication?.appliedAt ? new Date(selectedApplication.appliedAt).toLocaleDateString() : 'N/A'}</p>
-                                </div>
+                            {/* Other Applications */}
+                            <p className="text-lg text-muted-foreground leading-0">Other Applications</p>
+                            <div className="flex gap-2 max-w-full overflow-x-auto">
+                                {otherApplications.map((app) => (
+                                    <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
+                                        <p className="font-medium truncate">
+                                            {app.parentTeamName && <span className="text-muted-foreground">{app.parentTeamName} - </span>}
+                                            {app.subteamName}
+                                        </p>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
+                                                {app.stage}
+                                            </span>
+                                            {app.id === selectedApplication?.id && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>}
+                                        </div>
+                                        <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p>
+                                    </div>
+                                ))}
+                                {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
                             </div>
 
                             {/* Applicant Profile Section */}
-                            {selectedApplication?.profile && (
-                                <div className="border-b pb-4">
-                                    <h3 className="text-lg font-semibold mb-3">Applicant Profile</h3>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {applicantUrls?.resumeUrl && (
-                                            <div className="col-span-full">
-                                                <Label className="text-muted-foreground block mb-1">Resume</Label>
-                                                <iframe
-                                                    src={applicantUrls.resumeUrl}
-                                                    className="w-full min-h-[600px] border rounded-md"
-                                                    title="Resume"
-                                                />
-                                            </div>
-                                        )}
-                                        {selectedApplication.profile.linkedinUrl && (
-                                            <div>
-                                                <Label className="text-muted-foreground">LinkedIn</Label>
-                                                <a href={selectedApplication.profile.linkedinUrl} target="_blank" rel="noreferrer" className="block text-blue-600 hover:underline truncate">
-                                                    {selectedApplication.profile.linkedinUrl}
-                                                </a>
-                                            </div>
-                                        )}
-                                        {selectedApplication.profile.githubUrl && (
-                                            <div>
-                                                <Label className="text-muted-foreground">GitHub</Label>
-                                                <a href={selectedApplication.profile.githubUrl} target="_blank" rel="noreferrer" className="block text-blue-600 hover:underline truncate">
-                                                    {selectedApplication.profile.githubUrl}
-                                                </a>
-                                            </div>
-                                        )}
-                                        {selectedApplication.profile.whyAppDev && (
-                                            <div className="col-span-full">
-                                                <Label className="text-muted-foreground">Why AppDev?</Label>
-                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.whyAppDev}</p>
-                                            </div>
-                                        )}
-                                        {selectedApplication.profile.previousInvolvement && (
+                            <p className="text-lg text-muted-foreground leading-0 mt-2">{selectedApplication?.name.split(" ")[0]}'s Resume</p>
+                            <iframe
+                                src={applicantUrls?.resumeUrl}
+                                className="w-full min-h-[600px] border rounded-md"
+                                title="Resume"
+                            />
+
+                            {/* {selectedApplication.profile.previousInvolvement && (
                                             <div className="col-span-full">
                                                 <Label className="text-muted-foreground">Previous Involvement</Label>
                                                 <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.previousInvolvement}</p>
                                             </div>
-                                        )}
-                                        {selectedApplication.profile.additionalInfo && (
-                                            <div className="col-span-full">
-                                                <Label className="text-muted-foreground">Additional Info</Label>
-                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.additionalInfo}</p>
-                                            </div>
-                                        )}
-                                        {selectedApplication.profile.instagramFollow && (
-                                            <div className="col-span-full">
-                                                <Label className="text-muted-foreground">Instagram Follow</Label>
-                                                <p className="whitespace-pre-wrap text-sm mt-1 bg-muted/50 p-2 rounded">{selectedApplication.profile.instagramFollow}</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Responses Section */}
-                            {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
-                                <div>
-                                    <h3 className="text-lg font-semibold mb-3">Role Specific Responses</h3>
-                                    <div className="space-y-4">
-                                        {Object.entries(selectedApplication.responses).map(([question, answer]) => (
-                                            <div key={question} className="bg-muted/30 p-3 rounded-lg border">
-                                                <p className="text-sm font-medium mb-1">{question}</p>
-                                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{answer as string}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                                        )} */}
                         </div>
                     </div>
                 </DialogContent>

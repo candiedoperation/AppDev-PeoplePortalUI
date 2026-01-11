@@ -30,10 +30,7 @@ interface SubteamATSConfig {
 }
 
 // Type definition for applications returned from backend
-interface SubteamPreference {
-    subteamPk: string;
-    roles: string[];
-}
+
 
 interface KanbanApplicationCard {
     id: string;
@@ -43,7 +40,7 @@ interface KanbanApplicationCard {
     email: string;
     profile: { [key: string]: string };
     responses: { [key: string]: string };
-    subteamPreferences: SubteamPreference[];  // Team-level applications
+    rolePreferences: string[];  // Ordered role preferences
     hiredSubteamPk?: string;
     hiredRole?: string;
     appliedAt: string;
@@ -290,9 +287,9 @@ export const DashboardTeamRecruitment = () => {
                                                         <div className="flex flex-col">
                                                             <span className="font-semibold">{item.name}</span>
                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                {appItem.subteamPreferences && appItem.subteamPreferences.map((pref, idx) => (
+                                                                {appItem.rolePreferences && appItem.rolePreferences.map((role, idx) => (
                                                                     <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                                        {pref.roles.join('/')}
+                                                                        {role}
                                                                     </span>
                                                                 ))}
                                                             </div>
@@ -444,22 +441,14 @@ export const DashboardTeamRecruitment = () => {
 
                             {/* Subteam Preferences */}
                             <div>
-                                <h4 className="text-sm font-semibold mb-2">Subteam Preferences</h4>
+                                <h4 className="text-sm font-semibold mb-2">Roles in Order of Preference</h4>
                                 <div className="flex flex-col gap-2">
-                                    {selectedApplication?.subteamPreferences?.map((pref, idx) => {
-                                        const subteamName = subTeams.find(s => s.pk === pref.subteamPk)?.attributes.friendlyName || pref.subteamPk;
+                                    {selectedApplication?.rolePreferences?.map((role, idx) => {
                                         return (
                                             <div key={idx} className="bg-muted/50 p-2 rounded border border-border">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#{idx + 1}</span>
-                                                    <span className="text-xs font-medium text-muted-foreground">{subteamName}</span>
-                                                </div>
-                                                <div className="flex flex-wrap gap-1.5">
-                                                    {pref.roles.map(role => (
-                                                        <span key={role} className="bg-primary/10 text-primary text-xs font-semibold px-2 py-1 rounded-md border border-primary/20">
-                                                            {role}
-                                                        </span>
-                                                    ))}
+                                                    <span className="text-xs font-medium text-foreground">{role}</span>
                                                 </div>
                                             </div>
                                         );
@@ -546,8 +535,7 @@ export const DashboardTeamRecruitment = () => {
                                 {otherApplications.map((app) => (
                                     <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
                                         <p className="font-medium truncate">
-                                            {app.parentTeamName && <span className="text-muted-foreground">{app.parentTeamName} - </span>}
-                                            {app.subteamName}
+                                            {app.teamName || 'Unknown Team'}
                                         </p>
                                         <div className="flex justify-between items-center mt-1">
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>

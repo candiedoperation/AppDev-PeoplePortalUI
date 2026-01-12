@@ -1,5 +1,6 @@
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
 import React from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { TeamInfo, TeamInfoResponse } from "./DashboardTeamInfo";
 import { RecruitmentStatistics } from "./RecruitmentStatistics";
@@ -11,17 +12,17 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon, ExternalLinkIcon } from "lucide-react";
+import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Badge } from "../ui/badge";
+import { Checkbox } from "../ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { DialogFooter } from "../ui/dialog";
 
-const KANBAN_COLUMNS = [
-    { id: "applied", name: "New Applicants" },
-    { id: "accepted", name: "Accepted" },
-    { id: "interviewing", name: "Interviewing" },
-    { id: "rejected", name: "Rejected" },
-]
+
+
 
 interface SubteamATSConfig {
     roles: string[]
@@ -47,16 +48,24 @@ interface KanbanApplicationCard {
     [key: string]: unknown;  // Index signature for Kanban compatibility
 }
 
+interface StageDefinition {
+    id: string;
+    name: string;
+    [key: string]: unknown;  // Index signature for Kanban compatibility
+}
+
 export const DashboardTeamRecruitment = () => {
     const STAGE_STYLES: { [key: string]: string } = {
-        'applied': 'text-blue-700 bg-blue-50 border-blue-200',
-        'interviewing': 'text-purple-700 bg-purple-50 border-purple-200',
-        'accepted': 'text-green-700 bg-green-50 border-green-200',
-        'rejected': 'text-red-700 bg-red-50 border-red-200',
+        'New Applications': 'text-blue-700 bg-blue-50 border-blue-200',
+        'Interview': 'text-purple-700 bg-purple-50 border-purple-200',
+        'Hired': 'text-green-700 bg-green-50 border-green-200',
+        'Rejected': 'text-red-700 bg-red-50 border-red-200',
+        'Rejected After Interview': 'text-red-700 bg-red-50 border-red-200',
     }
     const params = useParams()
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
     const [subTeams, setSubTeams] = React.useState<TeamInfo[]>([]);
+    const [stages, setStages] = React.useState<StageDefinition[]>([]);
 
     const [roles, setRoles] = React.useState<{ [key: string]: Tag[] }>({});
     const [tagIndex, setTagIndex] = React.useState<{ [key: string]: number | null }>({});
@@ -71,6 +80,151 @@ export const DashboardTeamRecruitment = () => {
     const [otherApplications, setOtherApplications] = React.useState<any[]>([])
     const [dragStartColumn, setDragStartColumn] = React.useState<string | null>(null);
 
+
+
+    // --- Stage Transition Logic ---
+    const VALID_TRANSITIONS: { [key: string]: string[] } = {
+        'New Applications': ['Interview', 'Rejected'],
+        'Interview': ['Potential Hire', 'Hired', 'Rejected', 'Rejected After Interview'],
+        'Potential Hire': ['Hired', 'Rejected'],
+        // Terminal stages cannot transition anywhere
+        'Hired': [],
+        'Rejected': [],
+        'Rejected After Interview': []
+    }
+
+    const [pendingTransition, setPendingTransition] = React.useState<{ applicationId: string, newStage: string, previousStage: string } | null>(null)
+    const [actionDialog, setActionDialog] = React.useState<'reject' | 'interview' | 'potential' | 'hired' | null>(null)
+
+    // Dialog Inputs
+    const [interviewLink, setInterviewLink] = React.useState("")
+    const [saveInteviewLink, setSaveInterviewLink] = React.useState(false)
+    const [hiredRole, setHiredRole] = React.useState("")
+
+
+    // Load saved interview link on mount
+    React.useEffect(() => {
+        const saved = localStorage.getItem("interviewLink")
+        if (saved) {
+            setInterviewLink(saved)
+            setSaveInterviewLink(true)
+        }
+    }, [])
+
+    function validateTransition(currentStage: string, newStage: string): boolean {
+        // Allow same stage (no-op)
+        if (currentStage === newStage) return true;
+
+        const allowed = VALID_TRANSITIONS[currentStage] || [];
+        // If current stage isn't in definition, assume it's terminal or stuck (prevent move)
+        // Unless it's a super-user/admin override, but we stick to rules:
+        return allowed.includes(newStage);
+    }
+
+    // Unified handler for both Drag & Drop and Button clicks
+    function initiateStageUpdate(applicationId: string, currentStage: string, newStage: string) {
+        // 1. Validate
+        if (!validateTransition(currentStage, newStage)) {
+            toast.error("Invalid Stage Transition", {
+                description: `Cannot move from "${currentStage}" to "${newStage}".`
+            });
+            // If this came from drag-drop, we need to revert the optimistic update.
+            // Since we use 'applications' state, simply re-fetching or resetting state would work.
+            // For now, let's just trigger a re-fetch of applications to reset UI
+            fetchApplications();
+            return;
+        }
+
+        // 2. Set Pending Transition & Open Appropriate Dialog
+        setPendingTransition({ applicationId, newStage, previousStage: currentStage });
+
+        if (newStage === 'Rejected' || newStage === 'Rejected After Interview') {
+            setActionDialog('reject');
+        } else if (newStage === 'Interview') {
+            setActionDialog('interview');
+        } else if (newStage === 'Potential Hire') {
+            setActionDialog('potential');
+        } else if (newStage === 'Hired') {
+            setActionDialog('hired');
+        } else {
+            // No specific dialog for this transition (e.g. unexpected), just do it?
+            // Or maybe default to confirmation? For now, we only have these flows.
+            // If valid transition but no dialog, maybe just execute.
+            executeStageUpdate(applicationId, newStage);
+        }
+    }
+
+    function executeStageUpdate(applicationId: string, newStage: string, extraData?: any) {
+        // Optimistic update locally
+        setApplications(apps => apps.map(a => a.id === applicationId ? { ...a, column: newStage, stage: newStage } : a));
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${applicationId}/stage`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                stage: newStage,
+                ...extraData
+            })
+        })
+            .then(res => {
+                if (res.ok) {
+                    const stageName = stages.find(s => s.id === newStage)?.name || newStage;
+                    const app = applications.find(a => a.id === applicationId);
+                    toast.success("Stage Updated", { description: `Moved ${app?.name} to ${stageName}` })
+
+                    // Close dialogs and reset
+                    setPendingTransition(null);
+                    setActionDialog(null);
+
+                    // Sync selectedApplication state if it matches
+                    if (selectedApplication?.id === applicationId) {
+                        setSelectedApplication(prev => prev ? {
+                            ...prev,
+                            column: newStage,
+                            stage: newStage,
+                            hiredRole: extraData?.hiredRole ?? prev.hiredRole
+                        } : null);
+                    }
+
+                    setHiredRole("");
+
+
+                    // If interview link save was checked
+                    if (extraData?.interviewLink && saveInteviewLink) {
+                        localStorage.setItem("interviewLink", extraData.interviewLink);
+                    } else if (!saveInteviewLink) {
+                        localStorage.removeItem("interviewLink");
+                    }
+
+                    // Refresh app list to ensure consistency
+                    fetchApplications();
+                } else {
+                    toast.error("Failed to Update Stage");
+                    // Revert
+                    fetchApplications();
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                toast.error("Failed to Update Stage");
+                fetchApplications();
+            })
+    }
+
+    function cancelStageUpdate() {
+        if (pendingTransition) {
+            // Revert local state immediately
+            setApplications(apps => apps.map(a =>
+                a.id === pendingTransition.applicationId
+                    ? { ...a, column: pendingTransition.previousStage, stage: pendingTransition.previousStage }
+                    : a
+            ));
+        }
+        setPendingTransition(null);
+        setActionDialog(null);
+        setHiredRole("");
+    }
+
     function handleDragStart(event: DragStartEvent) {
         const item = applications.find(a => a.id === event.active.id);
         if (item) setDragStartColumn(item.column);
@@ -79,52 +233,52 @@ export const DashboardTeamRecruitment = () => {
     function handleDragEnd(event: DragEndEvent) {
         const { active, over } = event;
         const activeId = active.id;
-        if (!over) {
-            setDragStartColumn(null);
-            return;
-        }
-
-        // Determine the new column
-        // We use the same logic as KanbanProvider to guess where it landed
-        // But simpler: checking if over.id is a column or an item in a column
-
-
-
-        // If overContainer corresponds to a column ID, use it.
-        // But dnd-kit is flexible.
-
-        // Let's rely on checking the item in the 'applications' state
-        // Since 'onDataChange' runs during drag, the item might already be in the new column in the state.
-
-        // However, safe approach:
-        // Find the application in the *latest* applications state
-        const app = applications.find(a => a.id === activeId);
-
-        if (app && app.column !== dragStartColumn) {
-            // It changed column!
-            // Trigger API update
-            // Optimistic update is already done by onDataChange
-
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${activeId}/stage`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ column: app.column })
-            })
-                .then(res => {
-                    if (res.ok) {
-                        toast.success("Stage Updated", { description: `Moved ${app.name} to ${KANBAN_COLUMNS.find(c => c.id === app.column)?.name}` })
-                    } else {
-                        toast.error("Failed to Update Stage");
-                        // Revert? (Complex, maybe just reload data)
-                    }
-                })
-                .catch(err => {
-                    console.error(err);
-                    toast.error("Failed to Update Stage");
-                })
-        }
 
         setDragStartColumn(null);
+
+        if (!over) return;
+
+        const app = applications.find(a => a.id === activeId);
+        // If app exists and column actually changed
+        if (app && app.column !== over.id) { // over.id corresponds to column id if dropped on column
+            // But Wait! dnd-kit can drop on *items* too. 
+            // We need to resolve the target column correctly.
+            // The Kanban library handles the visual 'column' determination.
+            // We can check the 'applications' state because onDataChange has likely already run 
+            // updating the item's column optimistically during the drag!
+
+            // Actually, let's rely on valid transition logic.
+            // 'app.column' here references the state *before* the drop if we use 'applications' from closure?
+            // No, 'applications' is from state. 
+
+            // The KanbanProvider's onDragEnd (which calls this) has typically *finished* the visual move.
+            // But we need to check *where* it landed. The 'over.id' is either a column ID or another card ID.
+
+            // Let's find the column ID:
+            let targetColumn = over.id as string;
+            // If over.id matches an existing card, find that card's column
+            const overItem = applications.find(a => a.id === over.id);
+            if (overItem) targetColumn = overItem.column;
+
+            // The dragStartColumn is reliable for previous state.
+            if (targetColumn !== dragStartColumn) {
+                // Trigger our centralized logic
+                initiateStageUpdate(activeId as string, dragStartColumn!, targetColumn);
+            }
+        }
+    }
+
+    // Helper to refresh data
+    function fetchApplications() {
+        if (!params.teamId) return;
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}`, { credentials: 'include' })
+            .then(async (response) => {
+                const data = await response.json();
+                if (response.ok) {
+                    setApplications(Array.isArray(data) ? data : []);
+                }
+            })
+            .catch(console.error);
     }
 
     React.useEffect(() => {
@@ -155,6 +309,20 @@ export const DashboardTeamRecruitment = () => {
 
         console.log(selectedApplication)
     }, [selectedApplication])
+
+    // Fetch application stages
+    React.useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/stages`)
+            .then(async (response) => {
+                if (response.ok) {
+                    const data = await response.json();
+                    setStages(data);
+                }
+            })
+            .catch((e) => {
+                console.error("Failed to fetch stages:", e);
+            });
+    }, []);
 
     // Fetch applications from MongoDB
     React.useEffect(() => {
@@ -249,6 +417,25 @@ export const DashboardTeamRecruitment = () => {
         })
     }
 
+    // --- Navigation Logic ---
+    const reviewableStages = ['New Applications', 'Interview', 'Potential Hire'];
+    const reviewableApps = applications
+        .filter(a => reviewableStages.includes(a.column))
+        .sort((a, b) => {
+            const idxA = reviewableStages.indexOf(a.column);
+            const idxB = reviewableStages.indexOf(b.column);
+            return idxA - idxB;
+        });
+    const currentNavIndex = selectedApplication ? reviewableApps.findIndex(a => a.id === selectedApplication.id) : -1;
+
+    function navigateApplicant(direction: 'next' | 'prev') {
+        if (currentNavIndex === -1) return;
+        const newIndex = direction === 'next' ? currentNavIndex + 1 : currentNavIndex - 1;
+        if (newIndex >= 0 && newIndex < reviewableApps.length) {
+            setSelectedApplication(reviewableApps[newIndex]);
+        }
+    }
+
     return (
         <div className="flex flex-col m-2 h-full">
             <div className="flex items-center">
@@ -268,7 +455,7 @@ export const DashboardTeamRecruitment = () => {
                 <div className="mt-2 flex-grow flex flex-col min-h-0">
                     <TabsContent className="flex flex-col flex-grow h-full" value="applications">
                         <KanbanProvider
-                            columns={KANBAN_COLUMNS}
+                            columns={stages}
                             data={applications}
                             onDataChange={(data) => setApplications(data)}
                             onDragStart={handleDragStart}
@@ -406,7 +593,29 @@ export const DashboardTeamRecruitment = () => {
                     {/* Left Sidebar: Application Information */}
                     <div className="w-96 bg-muted/20 border-r p-4 flex flex-col gap-4 overflow-y-auto shrink-0">
                         <div>
-                            <h3 className="font-semibold text-lg">{selectedApplication?.name}</h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-semibold text-lg">{selectedApplication?.name}</h3>
+                                <div className="flex gap-1">
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => navigateApplicant('prev')}
+                                        disabled={currentNavIndex <= 0}
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-6 w-6"
+                                        onClick={() => navigateApplicant('next')}
+                                        disabled={currentNavIndex === -1 || currentNavIndex >= reviewableApps.length - 1}
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
                             <p className="text-sm text-muted-foreground">Application Information</p>
                         </div>
 
@@ -504,56 +713,65 @@ export const DashboardTeamRecruitment = () => {
                                 </div>
                             )}
                         </div>
-
-
-                        {/* <div className="flex gap-2">
-                            {otherApplications.map((app) => (
-                                <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
-                                    <p className="font-medium truncate">
-                                        {app.parentTeamName && <span className="text-muted-foreground">{app.parentTeamName} - </span>}
-                                        {app.subteamName}
-                                    </p>
-                                    <div className="flex justify-between items-center mt-1">
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
-                                            {app.stage}
-                                        </span>
-                                        {app.id === selectedApplication?.id && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>}
-                                    </div>
-                                    <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p>
-                                </div>
-                            ))}
-                            {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
-                        </div> */}
                     </div>
 
                     {/* Right Content: Application Details */}
                     <div className="flex-1 p-6 overflow-y-auto">
-                        <div className="flex flex-col gap-6 mt-6">
+                        <div className="h-full flex flex-col gap-6 pt-2">
+                            {/* Stage Movement Controls */}
+                            <p className="text-lg text-muted-foreground leading-0">Move to Stage</p>
+                            <div className="flex flex-wrap -space-x-px">
+                                {stages.map((stage) => (
+                                    <Button
+                                        key={stage.id}
+                                        variant={selectedApplication?.column === stage.id ? "ghost" : "outline"}
+                                        size="sm"
+                                        className={cn(
+                                            "rounded-none first:rounded-l-md last:rounded-r-md transition-all",
+                                            selectedApplication?.column === stage.id ?
+                                                "bg-primary/10 text-primary border border-primary z-10 disabled:opacity-100 font-medium" :
+                                                "text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-100"
+                                        )}
+                                        onClick={() => selectedApplication && initiateStageUpdate(selectedApplication.id, selectedApplication.column, stage.id)}
+                                        disabled={!selectedApplication || selectedApplication.column === stage.id || !validateTransition(selectedApplication.column, stage.id)}
+                                    >
+                                        {stage.name}
+                                    </Button>
+                                ))}
+                            </div>
+
+
                             {/* Other Applications */}
                             <p className="text-lg text-muted-foreground leading-0">Other Applications</p>
                             <div className="flex gap-2 max-w-full overflow-x-auto">
                                 {otherApplications.map((app) => (
-                                    <div key={app.id} className={`p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
-                                        <p className="font-medium truncate">
-                                            {app.teamName || 'Unknown Team'}
-                                        </p>
-                                        <div className="flex justify-between items-center mt-1">
+                                    <div key={app.id} className={`flex gap-6 p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
+                                        <div className="flex flex-col leading-[1]">
+                                            <p className="font-medium truncate">{app.teamName || 'Unknown Team'}</p>
+                                            <p className="text-[10px] text-muted-foreground mt-1">Applied {new Date(app.appliedAt).toLocaleDateString()}</p>
+                                        </div>
+
+                                        <Badge className={`${STAGE_STYLES[app.stage]} capitalize`} variant="secondary">{app.stage}</Badge>
+                                        {/* <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
+                                            {app.stage}
+                                        </span> */}
+                                        {/* <div className="flex justify-between items-center mt-1">
                                             <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
                                                 {app.stage}
                                             </span>
                                             {app.id === selectedApplication?.id && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>}
                                         </div>
-                                        <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p>
+                                        <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p> */}
                                     </div>
                                 ))}
                                 {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
                             </div>
 
                             {/* Applicant Profile Section */}
-                            <p className="text-lg text-muted-foreground leading-0 mt-2">{selectedApplication?.name.split(" ")[0]}'s Resume</p>
+                            <p className="text-lg text-muted-foreground leading-0">{selectedApplication?.name.split(" ")[0]}'s Resume</p>
                             <iframe
                                 src={applicantUrls?.resumeUrl}
-                                className="w-full min-h-[600px] border rounded-md"
+                                className="w-full flex-grow-1 border rounded-md"
                                 title="Resume"
                             />
 
@@ -567,6 +785,108 @@ export const DashboardTeamRecruitment = () => {
                     </div>
                 </DialogContent>
             </Dialog>
+            {/* --- Stage Action Dialogs --- */}
+
+            {/* 1. Reject Dialog */}
+            <Dialog open={actionDialog === 'reject'} onOpenChange={(open) => !open && setActionDialog(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirm Rejection</DialogTitle>
+                        <DialogDescription>
+                            Rejecting an applicant sends a formal email to them. If you're sure they don't meet App Dev expectations or if they can't be accomodated in your team, confirm this action.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
+                        <Button variant="destructive" onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage)}>
+                            Reject {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 2. Interview Dialog */}
+            <Dialog open={actionDialog === 'interview'} onOpenChange={(open) => !open && setActionDialog(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Schedule an Interview</DialogTitle>
+                        <DialogDescription>
+                            Yay! We're happy that {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]} meets our initial expectations. Please provide a Google Calendar link for your availability and we'll email them.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4 space-y-4">
+                        <Input
+                            placeholder="https://calendar.google.com/..."
+                            value={interviewLink}
+                            onChange={(e) => setInterviewLink(e.target.value)}
+                        />
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="save-link"
+                                checked={saveInteviewLink}
+                                onCheckedChange={(c) => setSaveInterviewLink(!!c)}
+                            />
+                            <Label htmlFor="save-link">Use the same link for future invites?</Label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
+                        <Button disabled={!interviewLink} onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage, { interviewLink })}>
+                            Invite {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 3. Potential Hire Dialog */}
+            <Dialog open={actionDialog === 'potential'} onOpenChange={(open) => !open && setActionDialog(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Move to Potential Hire?</DialogTitle>
+                        <DialogDescription>
+                            We'll send {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]} an email to inform they've passed the interview and are on hold considering space availability.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
+                        <Button onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage)}>
+                            Move {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* 4. Hired Dialog */}
+            <Dialog open={actionDialog === 'hired'} onOpenChange={(open) => !open && setActionDialog(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Confirm {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}'s Position</DialogTitle>
+                        <DialogDescription>
+                            We're excited that {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]} meets App Dev's talent bar. We'll send them a unique onboarding link to officially join the team.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Label className="mb-2 block">Please choose the role that you'd like to recruit them for.</Label>
+                        <Select value={hiredRole} onValueChange={setHiredRole}>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select Role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {applications.find(a => a.id === pendingTransition?.applicationId)?.rolePreferences?.map(role => (
+                                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
+                        <Button disabled={!hiredRole} onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage, { hiredRole, hiredSubteam: applications.find(a => a.id === pendingTransition?.applicationId)?.['teamPk'] })}>
+                            Onboard {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     )
 }

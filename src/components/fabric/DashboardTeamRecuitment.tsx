@@ -12,7 +12,7 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon } from "lucide-react";
+import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon, ClipboardCheckIcon, PartyPopperIcon, HeadsetIcon, CopyCheckIcon, ThumbsDownIcon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -21,6 +21,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DialogFooter } from "../ui/dialog";
 import { Textarea } from "../ui/textarea";
+import { Timeline, TimelineItem, TimelineLayout } from "../ui/timeline";
 
 
 
@@ -46,6 +47,11 @@ interface KanbanApplicationCard {
     hiredSubteamPk?: string;
     hiredRole?: string;
     appliedAt: string;
+    stageHistory?: {
+        stage: string;
+        changedAt: string;
+        changedBy?: string;
+    }[];
     [key: string]: unknown;  // Index signature for Kanban compatibility
 }
 
@@ -452,6 +458,22 @@ export const DashboardTeamRecruitment = () => {
         }
     }
 
+    // --- MISC UI STUFF ---
+    const getTimelineStageIcon = (stage: string) => {
+        switch (stage) {
+            case 'Applied':
+                return <ClipboardCheckIcon />
+            case 'Interview':
+                return <HeadsetIcon />
+            case 'Potential Hire':
+                return <CopyCheckIcon />
+            case 'Hired':
+                return <PartyPopperIcon />
+            case 'Rejected':
+                return <ThumbsDownIcon />
+        }
+    }
+
     return (
         <div className="flex flex-col m-2 h-full">
             <div className="flex items-center">
@@ -675,7 +697,7 @@ export const DashboardTeamRecruitment = () => {
 
                             {/* Subteam Preferences */}
                             <div>
-                                <h4 className="text-sm font-semibold mb-2">Roles in Order of Preference</h4>
+                                <h4 className="text-md text-muted-foreground mb-2">Roles in Order of Preference</h4>
                                 <div className="flex flex-col gap-2">
                                     {selectedApplication?.rolePreferences?.map((pref, idx) => {
                                         return (
@@ -688,45 +710,44 @@ export const DashboardTeamRecruitment = () => {
                                         );
                                     })}
                                 </div>
+                            </div>
 
-                                {/* Show hired decision if made */}
-                                {selectedApplication?.hiredSubteamPk && (
-                                    <div className="mt-3 bg-green-50 border border-green-200 p-2 rounded">
-                                        <span className="text-xs font-semibold text-green-700">
-                                            Hired: {selectedApplication.hiredRole} ({subTeams.find(s => s.pk === selectedApplication.hiredSubteamPk)?.attributes.friendlyName})
-                                        </span>
+                            {/* App Dev History */}
+                            <h4 className="text-md text-muted-foreground mb-2">App Dev History</h4>
+
+                            {/* Instagram Follow */}
+                            <div>
+                                <h4 className="text-md text-muted-foreground mb-2">Basic Information</h4>
+                                {selectedApplication?.profile?.instagramFollow && (
+                                    <div className="bg-muted/50 p-3 rounded">
+                                        <p className="text-sm font-medium mb-1">Do you follow App Dev on Instagram?</p>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.instagramFollow}</p>
                                     </div>
                                 )}
                             </div>
 
                             {/* Why AppDev */}
                             {selectedApplication?.profile?.whyAppDev && (
-                                <div>
-                                    <h4 className="text-sm font-semibold mb-2">Why AppDev?</h4>
-                                    <p className="whitespace-pre-wrap text-sm bg-muted/50 p-2 rounded leading-relaxed">{selectedApplication.profile.whyAppDev}</p>
+                                <div className="bg-muted/50 p-3 rounded">
+                                    <p className="text-sm font-medium mb-1">Why are you interested in joining App Dev?</p>
+                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.whyAppDev}</p>
                                 </div>
                             )}
 
                             {/* Additional Info */}
                             {selectedApplication?.profile?.additionalInfo && (
                                 <div>
-                                    <h4 className="text-sm font-semibold mb-2">Additional Info</h4>
-                                    <p className="whitespace-pre-wrap text-sm bg-muted/50 p-2 rounded leading-relaxed">{selectedApplication.profile.additionalInfo}</p>
-                                </div>
-                            )}
-
-                            {/* Instagram Follow */}
-                            {selectedApplication?.profile?.instagramFollow && (
-                                <div>
-                                    <h4 className="text-sm font-semibold mb-2">Instagram Follow</h4>
-                                    <p className="text-sm bg-muted/50 p-2 rounded">{selectedApplication.profile.instagramFollow}</p>
+                                    <div className="bg-muted/50 p-3 rounded">
+                                        <p className="text-sm font-medium mb-1">Is there something else you'd like to tell us?</p>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.additionalInfo}</p>
+                                    </div>
                                 </div>
                             )}
 
                             {/* Role Specific Responses */}
                             {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold mb-2">Role Specific Responses</h4>
+                                    <h4 className="text-md text-muted-foreground mb-4">Role Specific Responses</h4>
                                     <div className="space-y-3">
                                         {Object.entries(selectedApplication.responses).map(([question, answer]) => (
                                             <div key={question} className="bg-muted/50 p-3 rounded">
@@ -737,6 +758,23 @@ export const DashboardTeamRecruitment = () => {
                                     </div>
                                 </div>
                             )}
+
+                            {/* Application Stage History */}
+                            <div>
+                                <h4 className="text-md text-muted-foreground mb-4">Stage History</h4>
+                                <Timeline size="sm">
+                                    {selectedApplication?.stageHistory?.slice().map((history, index) => (
+                                        <TimelineItem
+                                            key={index}
+                                            date={new Date(history.changedAt).toLocaleString()}
+                                            title={history.stage}
+                                            icon={getTimelineStageIcon(history.stage)}
+                                            iconColor={STAGE_STYLES[history.stage]}
+                                            description={`Changed by ${history.changedBy || 'System'}`}
+                                        />
+                                    ))}
+                                </Timeline>
+                            </div>
                         </div>
                     </div>
 

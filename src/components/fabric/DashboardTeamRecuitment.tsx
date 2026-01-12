@@ -12,7 +12,7 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -20,6 +20,7 @@ import { Badge } from "../ui/badge";
 import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DialogFooter } from "../ui/dialog";
+import { Textarea } from "../ui/textarea";
 
 
 
@@ -41,7 +42,7 @@ interface KanbanApplicationCard {
     email: string;
     profile: { [key: string]: string };
     responses: { [key: string]: string };
-    rolePreferences: string[];  // Ordered role preferences
+    rolePreferences: { role: string, subteamPk: string }[];  // Ordered role preferences
     hiredSubteamPk?: string;
     hiredRole?: string;
     appliedAt: string;
@@ -56,11 +57,11 @@ interface StageDefinition {
 
 export const DashboardTeamRecruitment = () => {
     const STAGE_STYLES: { [key: string]: string } = {
-        'New Applications': 'text-blue-700 bg-blue-50 border-blue-200',
+        'Applied': 'text-blue-700 bg-blue-50 border-blue-200',
         'Interview': 'text-purple-700 bg-purple-50 border-purple-200',
         'Hired': 'text-green-700 bg-green-50 border-green-200',
         'Rejected': 'text-red-700 bg-red-50 border-red-200',
-        'Rejected After Interview': 'text-red-700 bg-red-50 border-red-200',
+        'Potential Hire': 'text-orange-700 bg-orange-50 border-orange-200',
     }
     const params = useParams()
     const [teamInfo, setTeamInfo] = React.useState<TeamInfo>();
@@ -84,7 +85,7 @@ export const DashboardTeamRecruitment = () => {
 
     // --- Stage Transition Logic ---
     const VALID_TRANSITIONS: { [key: string]: string[] } = {
-        'New Applications': ['Interview', 'Rejected'],
+        'Applied': ['Interview', 'Rejected'],
         'Interview': ['Potential Hire', 'Hired', 'Rejected', 'Rejected After Interview'],
         'Potential Hire': ['Hired', 'Rejected'],
         // Terminal stages cannot transition anywhere
@@ -99,6 +100,8 @@ export const DashboardTeamRecruitment = () => {
     // Dialog Inputs
     const [interviewLink, setInterviewLink] = React.useState("")
     const [saveInteviewLink, setSaveInterviewLink] = React.useState(false)
+    const [interviewGuidelines, setInterviewGuidelines] = React.useState("")
+    const [saveInterviewGuidelines, setSaveInterviewGuidelines] = React.useState(false)
     const [hiredRole, setHiredRole] = React.useState("")
 
 
@@ -108,6 +111,12 @@ export const DashboardTeamRecruitment = () => {
         if (saved) {
             setInterviewLink(saved)
             setSaveInterviewLink(true)
+        }
+
+        const savedGuidelines = localStorage.getItem("interviewGuidelines")
+        if (savedGuidelines) {
+            setInterviewGuidelines(savedGuidelines)
+            setSaveInterviewGuidelines(true)
         }
     }, [])
 
@@ -194,6 +203,13 @@ export const DashboardTeamRecruitment = () => {
                         localStorage.setItem("interviewLink", extraData.interviewLink);
                     } else if (!saveInteviewLink) {
                         localStorage.removeItem("interviewLink");
+                    }
+
+                    // If interview guidelines save was checked
+                    if (extraData?.interviewGuidelines && saveInterviewGuidelines) {
+                        localStorage.setItem("interviewGuidelines", extraData.interviewGuidelines);
+                    } else if (!saveInterviewGuidelines) {
+                        localStorage.removeItem("interviewGuidelines");
                     }
 
                     // Refresh app list to ensure consistency
@@ -418,7 +434,7 @@ export const DashboardTeamRecruitment = () => {
     }
 
     // --- Navigation Logic ---
-    const reviewableStages = ['New Applications', 'Interview', 'Potential Hire'];
+    const reviewableStages = ['Applied', 'Interview', 'Potential Hire'];
     const reviewableApps = applications
         .filter(a => reviewableStages.includes(a.column))
         .sort((a, b) => {
@@ -474,9 +490,9 @@ export const DashboardTeamRecruitment = () => {
                                                         <div className="flex flex-col">
                                                             <span className="font-semibold">{item.name}</span>
                                                             <div className="flex flex-wrap gap-1 mt-1">
-                                                                {appItem.rolePreferences && appItem.rolePreferences.map((role, idx) => (
+                                                                {appItem.rolePreferences && appItem.rolePreferences.map((pref, idx) => (
                                                                     <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                                        {role}
+                                                                        {pref.role}
                                                                     </span>
                                                                 ))}
                                                             </div>
@@ -623,41 +639,50 @@ export const DashboardTeamRecruitment = () => {
                         <div className="flex flex-col gap-4">
                             {/* Social Links */}
                             <div className="flex gap-2">
-                                {selectedApplication?.profile?.linkedinUrl && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => window.open(selectedApplication.profile.linkedinUrl, '_blank')}
-                                    >
-                                        LinkedIn
-                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
-                                    </Button>
-                                )}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => selectedApplication?.email && (window.location.href = `mailto:${selectedApplication.email}`)}
+                                    disabled={!selectedApplication?.email}
+                                >
+                                    Email
+                                    <MailIcon className="ml-1 h-3 w-3" />
+                                </Button>
 
-                                {selectedApplication?.profile?.githubUrl && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => window.open(selectedApplication.profile.githubUrl, '_blank')}
-                                    >
-                                        GitHub
-                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
-                                    </Button>
-                                )}
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => selectedApplication?.profile?.linkedinUrl && window.open(selectedApplication.profile.linkedinUrl, '_blank')}
+                                    disabled={!selectedApplication?.profile?.linkedinUrl}
+                                >
+                                    LinkedIn
+                                    <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                </Button>
+
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1"
+                                    onClick={() => selectedApplication?.profile?.githubUrl && window.open(selectedApplication.profile.githubUrl, '_blank')}
+                                    disabled={!selectedApplication?.profile?.githubUrl}
+                                >
+                                    GitHub
+                                    <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                </Button>
                             </div>
 
                             {/* Subteam Preferences */}
                             <div>
                                 <h4 className="text-sm font-semibold mb-2">Roles in Order of Preference</h4>
                                 <div className="flex flex-col gap-2">
-                                    {selectedApplication?.rolePreferences?.map((role, idx) => {
+                                    {selectedApplication?.rolePreferences?.map((pref, idx) => {
                                         return (
                                             <div key={idx} className="bg-muted/50 p-2 rounded border border-border">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#{idx + 1}</span>
-                                                    <span className="text-xs font-medium text-foreground">{role}</span>
+                                                    <span className="text-xs font-medium text-foreground">{pref.role}</span>
                                                 </div>
                                             </div>
                                         );
@@ -752,16 +777,6 @@ export const DashboardTeamRecruitment = () => {
                                         </div>
 
                                         <Badge className={`${STAGE_STYLES[app.stage]} capitalize`} variant="secondary">{app.stage}</Badge>
-                                        {/* <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
-                                            {app.stage}
-                                        </span> */}
-                                        {/* <div className="flex justify-between items-center mt-1">
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full border capitalize ${STAGE_STYLES[app.stage] || 'text-muted-foreground bg-muted border-border'}`}>
-                                                {app.stage}
-                                            </span>
-                                            {app.id === selectedApplication?.id && <span className="text-[10px] bg-primary text-primary-foreground px-1.5 py-0.5 rounded-full">Current</span>}
-                                        </div>
-                                        <p className="text-[10px] text-muted-foreground mt-1">{new Date(app.appliedAt).toLocaleDateString()}</p> */}
                                     </div>
                                 ))}
                                 {otherApplications.length === 0 && <p className="text-sm text-muted-foreground italic">No other applications found.</p>}
@@ -828,10 +843,39 @@ export const DashboardTeamRecruitment = () => {
                             />
                             <Label htmlFor="save-link">Use the same link for future invites?</Label>
                         </div>
+
+                        <div className="space-y-2">
+                            <Label>Interview Guidelines</Label>
+                            <Textarea
+                                placeholder="Please provide specific guidelines for the interview..."
+                                value={interviewGuidelines}
+                                onChange={(e) => setInterviewGuidelines(e.target.value)}
+                                className="min-h-[100px]"
+                            />
+                            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                <span>Min 50, Max 500 characters</span>
+                                <span className={cn(
+                                    (interviewGuidelines.length < 50 || interviewGuidelines.length > 500) ? "text-destructive" : "text-green-600"
+                                )}>
+                                    {interviewGuidelines.length} characters
+                                </span>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <Checkbox
+                                id="save-guidelines"
+                                checked={saveInterviewGuidelines}
+                                onCheckedChange={(c) => setSaveInterviewGuidelines(!!c)}
+                            />
+                            <Label htmlFor="save-guidelines">Save guidelines for future invites?</Label>
+                        </div>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
-                        <Button disabled={!interviewLink} onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage, { interviewLink })}>
+                        <Button
+                            disabled={!interviewLink || interviewGuidelines.length < 50 || interviewGuidelines.length > 500}
+                            onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage, { interviewLink, interviewGuidelines })}
+                        >
                             Invite {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
                         </Button>
                     </DialogFooter>
@@ -872,15 +916,26 @@ export const DashboardTeamRecruitment = () => {
                                 <SelectValue placeholder="Select Role" />
                             </SelectTrigger>
                             <SelectContent>
-                                {applications.find(a => a.id === pendingTransition?.applicationId)?.rolePreferences?.map(role => (
-                                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                                {applications.find(a => a.id === pendingTransition?.applicationId)?.rolePreferences?.map(pref => (
+                                    <SelectItem key={pref.role} value={pref.role}>{pref.role}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={cancelStageUpdate}>Cancel</Button>
-                        <Button disabled={!hiredRole} onClick={() => pendingTransition && executeStageUpdate(pendingTransition.applicationId, pendingTransition.newStage, { hiredRole, hiredSubteam: applications.find(a => a.id === pendingTransition?.applicationId)?.['teamPk'] })}>
+                        <Button disabled={!hiredRole} onClick={() => {
+                            if (!pendingTransition) return;
+                            const app = applications.find(a => a.id === pendingTransition?.applicationId);
+                            const targetPref = app?.rolePreferences.find(p => p.role === hiredRole);
+                            const targetSubteamPk = targetPref?.subteamPk || "";
+
+                            executeStageUpdate(
+                                pendingTransition.applicationId,
+                                pendingTransition.newStage,
+                                { hiredRole, hiredSubteamPk: targetSubteamPk }
+                            );
+                        }}>
                             Onboard {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]}
                         </Button>
                     </DialogFooter>

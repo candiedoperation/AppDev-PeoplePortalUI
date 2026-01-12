@@ -110,13 +110,23 @@ export const CorpDashboard = () => {
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/userinfo`)
-        .then(async (response) => {
-            const userlistResponse: CorpUserInfo = await response.json()
-            setUserInfo(_ => userlistResponse)
-        })
-        .catch((e) => {
-            toast.error("Failed to Fetch User Information: " + e.message)
-        })
+            .then(async (response) => {
+                if (response.status === 401) {
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                    return
+                }
+
+                try {
+                    const userlistResponse: CorpUserInfo = await response.json()
+                    setUserInfo(_ => userlistResponse)
+                } catch (e) {
+                    /* Backend likely returned a redirect to login page (HTML), so we should redirect */
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                }
+            })
+            .catch((e) => {
+                toast.error("Failed to Fetch User Information: " + e.message)
+            })
     }, []);
 
     return (

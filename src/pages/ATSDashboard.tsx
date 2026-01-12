@@ -464,26 +464,6 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                                     )}
                                                 </div>
                                             </div>
-
-                                            {(() => {
-                                                const stageMap: { [key: string]: { label: string, color: string, icon: any } } = {
-                                                    'New Applications': { label: 'UNDER REVIEW', color: 'bg-zinc-100 text-zinc-600 border-zinc-200', icon: InfoIcon },
-                                                    'Rejected': { label: 'REJECTED', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: InfoIcon },
-                                                    'Interview': { label: 'INTERVIEWING', color: 'bg-blue-50 text-blue-600 border-blue-200', icon: SparklesIcon },
-                                                    'Rejected After Interview': { label: 'REJECTED', color: 'bg-destructive/10 text-destructive border-destructive/20', icon: InfoIcon },
-                                                    'Hired': { label: 'ACCEPTED', color: 'bg-green-50 text-green-600 border-green-200 font-black', icon: CheckCircle2 }
-                                                };
-
-                                                const stageInfo = stageMap[app.stage] || { label: app.stage.toUpperCase(), color: 'bg-muted text-muted-foreground border-border', icon: InfoIcon };
-                                                const StatusIcon = stageInfo.icon;
-
-                                                return (
-                                                    <div className={`flex items-center gap-2 px-4 py-2 rounded-full border text-[11px] font-black tracking-widest shadow-sm ${stageInfo.color}`}>
-                                                        <StatusIcon className="h-3.5 w-3.5" />
-                                                        {stageInfo.label}
-                                                    </div>
-                                                );
-                                            })()}
                                         </div>
 
                                         {app.responses && Object.keys(app.responses).length > 0 && (
@@ -866,7 +846,10 @@ const ATSApplyPage = ({
                 credentials: 'include',
                 body: JSON.stringify({
                     teamPk: params.teamId,
-                    rolePreferences: selectedRoles, // Send ordered roles directly
+                    rolePreferences: selectedRoles.map(role => ({
+                        role: role,
+                        subteamPk: roleToSubteamMap.get(role) || ""
+                    })), // Send ordered roles directly
                     profile: profile,
                     responses: responses,
                 })

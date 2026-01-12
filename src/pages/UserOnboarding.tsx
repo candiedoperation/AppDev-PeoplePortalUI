@@ -47,7 +47,8 @@ import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config'
 
 interface CompleteSetupStageProps {
     stages: { name: string, status: boolean }[],
-    stepComplete: () => void
+    stepComplete: () => void,
+    isLoading: boolean
 }
 
 interface SlackJoinStageProps {
@@ -94,7 +95,8 @@ interface APIInviteInfo {
     inviteName: string;
     inviteEmail: string;
     roleTitle: string;
-    teamPk: string;
+    subteamPk: string;
+    teamName: string;
     inviterPk: number;
     expiresAt: Date;
 }
@@ -104,6 +106,7 @@ export const UserOnboarding = () => {
     const location = useLocation()
     const navigate = useNavigate()
 
+    const [isLoading, setIsLoading] = React.useState(false);
     const [inviteInfo, setInviteInfo] = React.useState<APIInviteInfo>()
     const slackJoinComplete = React.useRef(false);
     const ipAgreementComplete = React.useRef(false);
@@ -154,6 +157,7 @@ export const UserOnboarding = () => {
 
     const handleFormSubmit = () => {
         /* Send a Request to Create the User in Authentik, Setup Accounts, etc. */
+        setIsLoading(true)
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/${params.onboardId}`, {
             method: "PUT",
             headers: {
@@ -165,6 +169,20 @@ export const UserOnboarding = () => {
                 major: personalInfoRef.current?.major.name,
                 expectedGrad: personalInfoRef.current?.expectedGrad,
                 phoneNumber: personalInfoRef.current?.phoneNumber
+            })
+        }).then((res) => {
+            toast.success("Onboarding Complete!", {
+                description: "You'll automatically be redirected to the App Dev Club Portal."
+            })
+
+            setTimeout(() => {
+                setIsLoading(false)
+                navigate("/")
+            }, 1000)
+        }).catch(() => {
+            setIsLoading(false)
+            toast.error("Onboarding Failed!", {
+                description: "Please contact your team's leadership for assistance. Futher information can be found in your invite email."
             })
         })
     }
@@ -200,7 +218,8 @@ export const UserOnboarding = () => {
                     ...existingProps,
                     name: inviteData.inviteName,
                     email: inviteData.inviteEmail,
-                    role: inviteData.roleTitle
+                    role: inviteData.roleTitle,
+                    teamName: inviteData.teamName
                 }))
             })
 
@@ -257,6 +276,7 @@ export const UserOnboarding = () => {
                             <Route path='/identity' element={<PersonalInfoStage defaultData={personalInfoRef.current} {...personalInfoProps} />} />
                             <Route path='/complete' element={
                                 <CompleteSetupStage
+                                    isLoading={isLoading}
                                     stepComplete={handleNextStep}
                                     stages={[
                                         { name: "Password Creation", status: createdPasswordRef.current.length >= 8 },
@@ -317,9 +337,10 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
 
                 <Button
                     className='mt-5'
-                    disabled={!allStepsComplete}
+                    disabled={!allStepsComplete || props.isLoading}
                     onClick={props.stepComplete}
                 >
+                    <Loader2Icon style={{ display: (props.isLoading) ? 'block' : 'none' }} className='animate-spin' />
                     Finish Setup
                 </Button>
             </div>
@@ -464,28 +485,28 @@ const SlackJoinStage = (props: SlackJoinStageProps) => {
     const verifyJoinStatus = () => {
         setIsLoading(true)
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/tools/verifyslack`, {
-                method: "POST",
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json'
+            },
 
-                body: JSON.stringify({
-                    email: props.email
-                })
-            }).then(async (res) => {
-                const status: boolean = await res.json()
-                if (!status)
-                    throw new Error("Not Joined!")
-
-                setIsLoading(false)
-                setSlackJoinVerified(true)
-                props.stepComplete(true)
-            }).catch(() => {
-                setIsLoading(false)
-                toast.error("Verification Failed!", {
-                    description: "We couldn't verify that you're in the App Dev Slack. Please make sure that you used the correct email address and invite link as mentioned in the instructions."
-                })
+            body: JSON.stringify({
+                email: props.email
             })
+        }).then(async (res) => {
+            const status: boolean = await res.json()
+            if (!status)
+                throw new Error("Not Joined!")
+
+            setIsLoading(false)
+            setSlackJoinVerified(true)
+            props.stepComplete(true)
+        }).catch(() => {
+            setIsLoading(false)
+            toast.error("Verification Failed!", {
+                description: "We couldn't verify that you're in the App Dev Slack. Please make sure that you used the correct email address and invite link as mentioned in the instructions."
+            })
+        })
     }
 
     return (

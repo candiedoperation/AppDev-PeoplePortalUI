@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { TeamInfo, TeamInfoResponse } from "./DashboardTeamInfo";
 import { RecruitmentStatistics } from "./RecruitmentStatistics";
-import { useParams } from "react-router-dom";
+import { Link, Navigate, NavLink, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Switch } from "../ui/switch";
@@ -12,7 +12,7 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon, ClipboardCheckIcon, PartyPopperIcon, HeadsetIcon, CopyCheckIcon, ThumbsDownIcon } from "lucide-react";
+import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon, ClipboardCheckIcon, PartyPopperIcon, HeadsetIcon, CopyCheckIcon, ThumbsDownIcon, AlertTriangleIcon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -21,7 +21,8 @@ import { Checkbox } from "../ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DialogFooter } from "../ui/dialog";
 import { Textarea } from "../ui/textarea";
-import { Timeline, TimelineItem, TimelineLayout } from "../ui/timeline";
+import { Timeline, TimelineItem } from "../ui/timeline";
+import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 
 
 
@@ -47,6 +48,7 @@ interface KanbanApplicationCard {
     hiredSubteamPk?: string;
     hiredRole?: string;
     appliedAt: string;
+    appDevInternalPk: number;
     stageHistory?: {
         stage: string;
         changedAt: string;
@@ -695,6 +697,19 @@ export const DashboardTeamRecruitment = () => {
                                 </Button>
                             </div>
 
+                            {/* App Dev History */}
+                            {selectedApplication?.appDevInternalPk && (
+                                <Alert className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                                    <AlertTriangleIcon />
+                                    <AlertTitle>App Dev History</AlertTitle>
+                                    <AlertDescription>
+                                        <p>
+                                            {selectedApplication?.name.split(" ")[0]} is already in App Dev. To view more about their team history and their internal profile, please <NavLink to={`/org/people/${selectedApplication?.appDevInternalPk}`} className="font-medium hover:underline underline-offset-4">click here</NavLink>.
+                                        </p>
+                                    </AlertDescription>
+                                </Alert>
+                            )}
+
                             {/* Subteam Preferences */}
                             <div>
                                 <h4 className="text-md text-muted-foreground mb-2">Roles in Order of Preference</h4>
@@ -711,9 +726,6 @@ export const DashboardTeamRecruitment = () => {
                                     })}
                                 </div>
                             </div>
-
-                            {/* App Dev History */}
-                            <h4 className="text-md text-muted-foreground mb-2">App Dev History</h4>
 
                             {/* Instagram Follow */}
                             <div>

@@ -119,7 +119,7 @@ export const DashboardTeamInfo = () => {
             }
 
             const reader = response.body.getReader();
-            let decoder = new TextDecoder();
+            const decoder = new TextDecoder();
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -455,8 +455,8 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                                     <CommandList>
                                         <CommandGroup>
                                             {props.subteams.map((team) => {
-                                                let teamDisplayName = `${team.attributes.friendlyName} (${team.attributes.description})`
-                                                let teamDisplayDesc = team.name
+                                                const teamDisplayName = `${team.attributes.friendlyName} (${team.attributes.description})`
+                                                const teamDisplayDesc = team.name
 
                                                 return (
                                                     <CommandItem

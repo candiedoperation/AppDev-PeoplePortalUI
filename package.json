@@ -36,6 +36,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "emblor-maintained": "^1.4.11",
+    "framer-motion": "^12.26.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.539.0",
     "react": "^19.1.1",

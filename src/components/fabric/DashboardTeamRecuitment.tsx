@@ -504,24 +504,31 @@ export const DashboardTeamRecruitment = () => {
                         >
                             {(/* column */ col) => (
                                 <KanbanBoard id={col.id} className="min-w-[250px] ring-inset">
-                                    <KanbanHeader>{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
+                                    <KanbanHeader >{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
                                     <KanbanCards id={col.id}>
                                         {(item) => {
                                             const appItem = item as unknown as KanbanApplicationCard;
                                             return (
-                                                <KanbanCard id={item.id} name={item.name} column={item.column} className="bg-background cursor-grab border-border">
-                                                    <div className="flex items-center justify-between w-full">
-                                                        <div className="flex flex-col">
-                                                            <span className="font-semibold">{item.name}</span>
-                                                            <div className="flex flex-wrap gap-1 mt-1">
-                                                                {appItem.rolePreferences && appItem.rolePreferences.map((pref, idx) => (
-                                                                    <span key={idx} className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                                                                        {pref.role}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
+                                                <KanbanCard
+                                                    id={item.id}
+                                                    name={item.name}
+                                                    column={item.column}
+                                                    className="bg-background hover:bg-muted/50 transition-colors border-border p-3"
+                                                    onClick={() => setSelectedApplication(appItem)}
+                                                >
+                                                    <div className="flex flex-col w-full">
+                                                        <div className="flex items-baseline justify-between gap-2">
+                                                            <span className="font-semibold text-xs truncate leading-tight">{item.name}</span>
+                                                            <span className="text-[9px] text-muted-foreground whitespace-nowrap tabular-nums shrink-0">
+                                                                {new Date(appItem.appliedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                            </span>
                                                         </div>
-                                                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedApplication(item as unknown as KanbanApplicationCard); }}>Open</Button>
+
+                                                        {appItem.rolePreferences && appItem.rolePreferences.length > 0 && (
+                                                            <div className="text-[10px] text-muted-foreground/80 truncate mt-0.5 leading-tight">
+                                                                {appItem.rolePreferences.map(p => p.role).join(", ")}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </KanbanCard>
                                             );
@@ -703,9 +710,9 @@ export const DashboardTeamRecruitment = () => {
                                     <AlertTriangleIcon />
                                     <AlertTitle>App Dev History</AlertTitle>
                                     <AlertDescription>
-                                        <p>
+                                        <span>
                                             {selectedApplication?.name.split(" ")[0]} is already in App Dev. To view more about their team history and their internal profile, please <NavLink to={`/org/people/${selectedApplication?.appDevInternalPk}`} className="font-medium hover:underline underline-offset-4">click here</NavLink>.
-                                        </p>
+                                        </span>
                                     </AlertDescription>
                                 </Alert>
                             )}

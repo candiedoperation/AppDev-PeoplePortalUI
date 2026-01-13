@@ -88,16 +88,18 @@ export const KanbanBoard = ({ id, children, className }: KanbanBoardProps) => {
   );
 };
 
-export type KanbanCardProps<T extends KanbanItemProps = KanbanItemProps> = T & {
-  children?: ReactNode;
-  className?: string;
-};
+export type KanbanCardProps<T extends KanbanItemProps = KanbanItemProps> = T &
+  React.HTMLAttributes<HTMLDivElement> & {
+    children?: ReactNode;
+    className?: string;
+  };
 
 export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
   id,
   name,
   children,
   className,
+  ...props
 }: KanbanCardProps<T>) => {
   const {
     attributes,
@@ -118,22 +120,17 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
 
   return (
     <>
-      <div style={style} ref={setNodeRef} {...attributes}>
+      <div style={style} ref={setNodeRef} {...attributes} {...listeners}>
         <Card
+          {...props}
           className={cn(
-            'gap-4 rounded-md p-3 shadow-sm relative',
+            'gap-4 rounded-md shadow-sm relative cursor-grab active:cursor-grabbing',
             isDragging && 'opacity-30',
             className
           )}
         >
-          {/* Drag handle overlay - covers the card but allows pointer events to pass through to children */}
-          <div
-            {...listeners}
-            className="absolute inset-0 cursor-grab z-0"
-            style={{ pointerEvents: 'auto' }}
-          />
           {/* Content with higher z-index for interactivity */}
-          <div className="relative z-10 pointer-events-auto">
+          <div className="relative z-10" style={{ padding: '0px' }}>
             {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
           </div>
         </Card>
@@ -141,13 +138,16 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
       {activeCardId === id && (
         <t.In>
           <Card
+            {...props}
             className={cn(
-              'cursor-grab gap-4 rounded-md p-3 shadow-sm ring-2 ring-primary',
+              'cursor-grab gap-4 rounded-md shadow-sm ring-2 ring-primary',
               isDragging && 'cursor-grabbing',
               className
             )}
           >
-            {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
+            <div className="relative z-10" style={{ padding: '0px' }}>
+              {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
+            </div>
           </Card>
         </t.In>
       )}
@@ -222,8 +222,17 @@ export const KanbanProvider = <
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(MouseSensor),
-    useSensor(TouchSensor),
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        tolerance: 5,
+        delay: 250,
+      },
+    }),
     useSensor(KeyboardSensor)
   );
 

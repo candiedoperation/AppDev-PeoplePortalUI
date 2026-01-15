@@ -674,17 +674,16 @@ const SubteamsInfoDialog = (props: {
 
     React.useEffect(() => {
         if (props.open && !currentSubTeam)
-            setCurrentSubTeam(_ => sortedSubteams[0])
-    }, [props.open, sortedSubteams, currentSubTeam])
+            setCurrentSubTeam(sortedSubteams[0])
+    }, [props.open, sortedSubteams]);
 
     // Sync currentSubTeam with updated props after refresh to reflect saved changes
     React.useEffect(() => {
-        if (currentSubTeam) {
-            const updated = props.subteams.find(s => s.pk === currentSubTeam.pk);
-            if (updated) {
-                setCurrentSubTeam(updated);
-            }
-        }
+        setCurrentSubTeam(prev => {
+            if (!prev) return prev;
+            const updated = props.subteams.find(s => s.pk === prev.pk);
+            return updated || prev;
+        });
     }, [props.subteams])
 
     React.useEffect(() => {
@@ -744,6 +743,7 @@ const SubteamsInfoDialog = (props: {
         }
 
         setIsSaving(true);
+        const friendlyName = currentSubTeam.attributes.friendlyName
         // 1. Update bindles first
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}/bindles`, {
             method: "PATCH",
@@ -778,7 +778,7 @@ const SubteamsInfoDialog = (props: {
                 }
             })
             .then(() => {
-                toast.success(`Settings updated for ${currentSubTeam.attributes.friendlyName}!`);
+                toast.success(`Settings updated for ${friendlyName}!`);
                 props.onRefresh();
             })
             .catch(e => {
@@ -1068,7 +1068,7 @@ const RemoveMemberDialog = (props: {
                 <DialogHeader>
                     <DialogTitle>Confirm Member Removal</DialogTitle>
                     <DialogDescription>
-                        Are you sure you want to remove <b>{props.user?.name}</b> from the <b>{props.teamName}</b> team?
+                        Are you sure you want to remove <strong>{props.user?.name}</strong> from the <strong>{props.teamName}</strong> team?
                         This will revoke their access to team resources immediately and send them a formal email.
                     </DialogDescription>
                 </DialogHeader>

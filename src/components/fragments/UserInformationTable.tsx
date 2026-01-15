@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { Pagination, PaginationContent, PaginationItem, PaginationPrevious, PaginationLink, PaginationEllipsis, PaginationNext } from "../ui/pagination";
-import { User2Icon, XIcon } from "lucide-react";
+import { Trash2Icon, User2Icon } from "lucide-react";
 
 export interface UserInformationBrief {
     pk: string,
@@ -39,12 +39,13 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 
     const columns: ColumnDef<UserInformationBrief>[] = [
-        { accessorKey: 'name', header: "Name" },
-        { accessorKey: "username", header: "Alias" },
-        { accessorKey: 'email', header: "Contact Information" },
+        { accessorKey: 'name', header: "Name", size: 100 },
+        { accessorKey: "username", header: "Alias", size: 120 },
+        { accessorKey: 'email', header: "Contact Information", size: 180 },
         ...(onRemove ? [{
             id: 'actions',
-            header: '',
+            header: 'Actions',
+            size: 70,
             cell: ({ row }: { row: { original: UserInformationBrief } }) => (
                 <button
                     onClick={(e) => {
@@ -54,7 +55,7 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                     className="p-1 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-full text-muted-foreground hover:text-red-600 transition-colors"
                     title="Remove member"
                 >
-                    <XIcon size={16} />
+                    <Trash2Icon size={16} />
                 </button>
             )
         }] : [])
@@ -120,13 +121,18 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
             </div>
 
             <div className="overflow-hidden rounded-md border">
-                <Table>
+                <Table className="table-fixed">
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => {
+                                    const widthClass =
+                                        header.id === 'name' ? 'w-[100px]' :
+                                            header.id === 'username' ? 'w-[120px]' :
+                                                header.id === 'email' ? 'w-[250px]' :
+                                                    header.id === 'actions' ? 'w-[70px]' : '';
                                     return (
-                                        <TableHead key={header.id}>
+                                        <TableHead key={header.id} className={widthClass}>
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -149,7 +155,12 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                                     style={{ cursor: 'pointer' }}
                                 >
                                     {row.getVisibleCells().map((cell) => {
-                                        return (<TableCell key={cell.id}>
+                                        const widthClass =
+                                            cell.column.id === 'name' ? 'w-[100px]' :
+                                                cell.column.id === 'username' ? 'w-[120px]' :
+                                                    cell.column.id === 'email' ? 'w-[250px]' :
+                                                        cell.column.id === 'actions' ? 'w-[70px]' : '';
+                                        return (<TableCell key={cell.id} className={widthClass}>
                                             {
                                                 flexRender(
                                                     (() => {
@@ -173,6 +184,15 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                                                                         <span className="text-muted-foreground">{lastName}</span>
                                                                     </div>
                                                                 </div>)
+                                                            }
+
+                                                            case "email": {
+                                                                const email = cell.getValue() as string;
+                                                                return (
+                                                                    <div className="truncate" title={email}>
+                                                                        {email}
+                                                                    </div>
+                                                                )
                                                             }
 
                                                             default:

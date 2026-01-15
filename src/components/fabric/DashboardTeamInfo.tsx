@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -662,11 +662,11 @@ const SubteamsInfoDialog = (props: {
     onRefresh: () => void
 }) => {
     const [currentSubTeam, setCurrentSubTeam] = React.useState<TeamInfo>()
-    const originalSubTeam = React.useMemo(() => props.subteams.find(s => s.pk === currentSubTeam?.pk), [props.subteams, currentSubTeam?.pk])
     const [bindleDefinitions, setBindleDefinitions] = React.useState<BindleDefinitionMap>({})
     const [enabledBindles, setEnabledBindles] = React.useState<{ [key: string]: { [key: string]: boolean } }>({})
     const [isLoadingBindles, setIsLoadingBindles] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
+    const [editDetailsOpen, setEditDetailsOpen] = React.useState(false);
 
     const sortedSubteams = React.useMemo(() => {
         return [...props.subteams].sort((a, b) => a.attributes.friendlyName.localeCompare(b.attributes.friendlyName))
@@ -789,6 +789,17 @@ const SubteamsInfoDialog = (props: {
             });
     }
 
+    const handleSaveDetails = (name: string, description: string) => {
+        setCurrentSubTeam(prev => prev ? ({
+            ...prev,
+            attributes: {
+                ...prev.attributes,
+                friendlyName: name,
+                description: description
+            }
+        }) : prev)
+    }
+
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] min-h-[60%] p-0 select-none">
@@ -813,39 +824,29 @@ const SubteamsInfoDialog = (props: {
 
                     <Separator orientation="vertical" />
                     <div className="flex-grow-1 m-4">
+                        <EditDetailsDialog
+                            open={editDetailsOpen}
+                            onOpenChange={setEditDetailsOpen}
+                            title="Edit Subteam Details"
+                            description="Update the name and description for this subteam."
+                            initialName={currentSubTeam?.attributes.friendlyName || ""}
+                            initialDescription={currentSubTeam?.attributes.description || ""}
+                            onSave={handleSaveDetails}
+                        />
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl">{originalSubTeam?.attributes.friendlyName}</h1>
-                            {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
-                        </div>
-                        <div className="flex flex-col gap-4 mb-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="subteam-friendly-name">Subteam Name</Label>
-                                <Input
-                                    id="subteam-friendly-name"
-                                    value={currentSubTeam?.attributes.friendlyName || ""}
-                                    onChange={(e) => {
-                                        const newValue = e.target.value;
-                                        setCurrentSubTeam(prev => prev ? ({ ...prev, attributes: { ...prev.attributes, friendlyName: newValue } }) : prev)
-                                    }}
-                                    placeholder="Subteam Name"
-                                />
-                            </div>
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="subteam-description">Description</Label>
-                                <Input
-                                    id="subteam-description"
-                                    value={currentSubTeam?.attributes.description || ""}
-                                    onChange={(e) => {
-                                        const newValue = e.target.value;
-                                        setCurrentSubTeam(prev => prev ? ({ ...prev, attributes: { ...prev.attributes, description: newValue } }) : prev)
-                                    }}
-                                    placeholder="Subteam Description"
-                                />
+                            <div className="flex flex-col flex-grow-1">
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer" onClick={() => setEditDetailsOpen(true)}>
+                                        <PencilIcon size={16} />
+                                    </Button>
+                                    {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
+                                </div>
+                                <p className="text-muted-foreground">{currentSubTeam?.attributes.description}</p>
                             </div>
                         </div>
 
-                        <Separator className="mb-2" />
+                        <Separator className="my-4" />
 
                         <div className="flex flex-col mt-2">
                             {
@@ -915,6 +916,7 @@ const TeamSettingsDialog = (props: {
     // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
     const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
     const [localAttributes, setLocalAttributes] = React.useState({ friendlyName: "", description: "" })
+    const [editDetailsOpen, setEditDetailsOpen] = React.useState(false)
 
     /* Initialize settings when dialog opens or teamInfo/settingDefinitions change */
     React.useEffect(() => {
@@ -966,28 +968,26 @@ const TeamSettingsDialog = (props: {
         <Dialog open={props.open} onOpenChange={props.openChanged}>
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-lg min-h-[60%] p-0 select-none">
                 <div className="flex-grow-1 m-4">
-                    <h1 className="text-2xl">Team Settings for {props.teamInfo?.attributes.friendlyName}</h1>
+                    <EditDetailsDialog
+                        open={editDetailsOpen}
+                        onOpenChange={setEditDetailsOpen}
+                        title="Edit Team Details"
+                        description="Update the name and description for your team."
+                        initialName={localAttributes.friendlyName}
+                        initialDescription={localAttributes.description}
+                        onSave={(name, description) => setLocalAttributes({ friendlyName: name, description: description })}
+                    />
+                    <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
 
                     <div className="flex flex-col gap-4 mt-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="team-friendly-name">Team Name</Label>
-                            <Input
-                                id="team-friendly-name"
-                                value={localAttributes.friendlyName}
-                                onChange={(e) => setLocalAttributes(prev => ({ ...prev, friendlyName: e.target.value }))}
-                                placeholder="Team Name"
-                            />
-                        </div>
+                        <div className="flex border-1 p-2 rounded-md mt-2 items-center">
+                            <div className="flex flex-col text-sm flex-grow-1">
+                                <p>Team Identity</p>
+                                <p className="text-muted-foreground text-sm">Configure your team's name and description</p>
+                            </div>
 
-                        <div className="grid gap-2">
-                            <Label htmlFor="team-description">Description</Label>
-                            <Input
-                                id="team-description"
-                                value={localAttributes.description}
-                                onChange={(e) => setLocalAttributes(prev => ({ ...prev, description: e.target.value }))}
-                                placeholder="Team Description"
-                            />
+                            <Button variant="outline" size="sm" onClick={() => setEditDetailsOpen(true)}>Edit Details</Button>
                         </div>
 
                         <Separator />
@@ -1051,6 +1051,66 @@ const CustomPopoverFilterBox = (props: React.ComponentProps<"input"> & { isLoadi
 
             <Loader2Icon className={`animate-spin ${(!props.isLoading) ? "invisible" : ""}`} />
         </div>
+    )
+}
+
+const EditDetailsDialog = (props: {
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    title: string,
+    description: string,
+    initialName: string,
+    initialDescription: string,
+    onSave: (name: string, description: string) => void
+}) => {
+    const [name, setName] = React.useState(props.initialName)
+    const [description, setDescription] = React.useState(props.initialDescription)
+
+    React.useEffect(() => {
+        setName(props.initialName)
+        setDescription(props.initialDescription)
+    }, [props.open, props.initialName, props.initialDescription])
+
+    const handleSave = () => {
+        props.onSave(name, description)
+        props.onOpenChange(false)
+    }
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{props.title}</DialogTitle>
+                    <DialogDescription>
+                        {props.description}
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit-details-name">Name</Label>
+                        <Input
+                            id="edit-details-name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Name"
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit-details-description">Description</Label>
+                        <Input
+                            id="edit-details-description"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Description"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
+                    <Button onClick={handleSave}>OK</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }
 

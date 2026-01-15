@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { Pagination, PaginationContent, PaginationItem, PaginationPrevious, PaginationLink, PaginationEllipsis, PaginationNext } from "../ui/pagination";
-import { User2Icon } from "lucide-react";
+import { User2Icon, XIcon } from "lucide-react";
 
 export interface UserInformationBrief {
     pk: string,
@@ -22,14 +22,16 @@ export interface UserTableProps {
     users: UserInformationBrief[];
     showPagination?: boolean;
     onUserClick?: (userId: string) => void;
+    onRemove?: (user: UserInformationBrief) => void;
     filterPlaceholder?: string;
     className?: string;
 }
 
-export const UserInformationTable: React.FC<UserTableProps> = ({ 
-    users, 
-    showPagination = false, 
+export const UserInformationTable: React.FC<UserTableProps> = ({
+    users,
+    showPagination = false,
     onUserClick,
+    onRemove,
     filterPlaceholder = "Start Typing to Filter by Name",
     className = ""
 }) => {
@@ -39,7 +41,23 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
     const columns: ColumnDef<UserInformationBrief>[] = [
         { accessorKey: 'name', header: "Name" },
         { accessorKey: "username", header: "Alias" },
-        { accessorKey: 'email', header: "Contact Information" }
+        { accessorKey: 'email', header: "Contact Information" },
+        ...(onRemove ? [{
+            id: 'actions',
+            header: '',
+            cell: ({ row }: { row: { original: UserInformationBrief } }) => (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onRemove(row.original);
+                    }}
+                    className="p-1 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-full text-muted-foreground hover:text-red-600 transition-colors"
+                    title="Remove member"
+                >
+                    <XIcon size={16} />
+                </button>
+            )
+        }] : [])
     ]
 
     const table = useReactTable({

@@ -221,6 +221,11 @@ export const UserOnboarding = () => {
                     role: inviteData.roleTitle,
                     teamName: inviteData.teamName
                 }))
+
+                setSlackJoinProps((existingProps) => ({
+                    ...existingProps,
+                    email: inviteData.inviteEmail
+                }))
             })
 
             .catch(() => {
@@ -494,8 +499,11 @@ const SlackJoinStage = (props: SlackJoinStageProps) => {
                 email: props.email
             })
         }).then(async (res) => {
+            if (!res.ok) {
+                throw new Error(res.statusText)
+            }
             const status: boolean = await res.json()
-            if (!status)
+            if (status !== true)
                 throw new Error("Not Joined!")
 
             setIsLoading(false)

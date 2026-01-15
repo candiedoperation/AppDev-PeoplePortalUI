@@ -73,10 +73,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // Type for subteam preference (internal mapping)
-interface SubteamPreference {
-    subteamPk: string;
-    roles: string[];
-}
+
 
 // Team data from backend
 interface ATSTeamData {
@@ -155,16 +152,22 @@ const PERSONAL_INFO_FIELDS: PersonalInfoField[] = [
 ]
 
 // Updated application interface - team-level
+interface ApplicationRolePreference {
+    role: string;
+    subteamPk: string;
+    subteamName?: string;
+}
+
 interface ATSApplication {
     _id: string;
-    teamPk: string;  // CHANGED from subteamPk
-    teamName?: string;  // CHANGED from subteamName/parentTeamName
-    subteamPreferences: SubteamPreference[];  // CHANGED from roles: string[]
+    teamPk: string;
+    teamName?: string;
+    rolePreferences: ApplicationRolePreference[];
     stage: string;
     appliedAt: string;
     responses: { [key: string]: string };
-    hiredSubteamPk?: string;  // NEW
-    hiredRole?: string;  // NEW
+    hiredSubteamPk?: string;
+    hiredRole?: string;
 }
 
 interface OTPSessionResponse {
@@ -300,7 +303,7 @@ export const ATSDashboard = () => {
 
 
             <AccountLoginAndVerifyDialog
-                open={(!fullName && location.pathname.includes("/apply/") && !location.pathname.endsWith("/apply/") && !location.pathname.endsWith("/applications")) || triggerLogin}
+                open={(!fullName && location.pathname.includes("/apply/") && !location.pathname.endsWith("/apply/")) || triggerLogin}
                 onSuccess={(data) => {
                     setTriggerLogin(false);
                     handleSessionUpdate(data);
@@ -442,21 +445,8 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                                 <h3 className="text-2xl font-black tracking-tight">
                                                     {app.teamName || app.teamPk}
                                                 </h3>
-                                                {/* Show subteam preferences */}
+                                                {/* Show hired status if applicable */}
                                                 <div className="flex flex-col gap-2 pt-1">
-                                                    {app.subteamPreferences.map((pref, idx) => (
-                                                        <div key={idx} className="flex flex-wrap gap-2 items-center">
-                                                            <Badge variant="outline" className="text-[10px] uppercase tracking-tighter font-black bg-muted/50 py-0 h-5">
-                                                                Preference {idx + 1}
-                                                            </Badge>
-                                                            {pref.roles.map((role) => (
-                                                                <Badge key={role} className="bg-primary/5 text-primary border-primary/10 font-bold px-3">
-                                                                    {role}
-                                                                </Badge>
-                                                            ))}
-                                                        </div>
-                                                    ))}
-                                                    {/* Show hired status if applicable */}
                                                     {app.hiredSubteamPk && (
                                                         <Badge className="bg-green-500/10 text-green-600 border-green-200 w-max">
                                                             Hired: {app.hiredRole}
@@ -474,6 +464,24 @@ export const ATSApplicationsList = ({ applications, profile, fullName, email }: 
                                                     </AccordionTrigger>
                                                     <AccordionContent className="pt-4">
                                                         <div className="grid gap-4">
+                                                            {/* Preferred Roles List */}
+                                                            <div className="p-4 rounded-xl bg-muted/20 border border-border/30">
+                                                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">Priority Roles</p>
+                                                                <div className="space-y-2">
+                                                                    {app.rolePreferences?.map((pref, idx) => (
+                                                                        <div key={idx} className="flex items-center gap-2 text-sm">
+                                                                            <Badge variant="outline" className="text-[10px] font-bold h-5 w-5 flex items-center justify-center rounded-full p-0 shrink-0">
+                                                                                {idx + 1}
+                                                                            </Badge>
+                                                                            <span className="font-bold">{pref.role}</span>
+                                                                            <span className="text-muted-foreground text-xs">
+                                                                                ({pref.subteamName || pref.subteamPk})
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+
                                                             {Object.entries(app.responses).map(([question, answer]) => (
                                                                 <div key={question} className="p-4 rounded-xl bg-muted/20 border border-border/30">
                                                                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">{question}</p>
@@ -1436,9 +1444,23 @@ const AccountLoginAndVerifyDialog = ({ onSuccess, fullName: parentFullName, open
         })
             .then(async (res) => {
                 if (res.ok) {
-                    const data = await res.json()
-                    onSuccess(data)
-                    setOpen(false)
+                    // Fetch full session data including applications
+                    fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/verifyotpsession`, {
+                        method: "GET",
+                        credentials: 'include'
+                    })
+                        .then(async (sessionRes) => {
+                            const data = await sessionRes.json()
+                            if (sessionRes.ok && !data.error) {
+                                onSuccess(data)
+                                setOpen(false)
+                            } else {
+                                toast.error("Failed to load session data")
+                            }
+                        })
+                        .catch(() => {
+                            toast.error("Network error while loading session")
+                        })
                 }
 
                 else {

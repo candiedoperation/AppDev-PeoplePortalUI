@@ -727,6 +727,9 @@ const SubteamsInfoDialog = (props: {
             case "AppleAccountClient":
                 return "Apple Account"
 
+            case "PeoplePortalClient":
+                return "People Portal Access"
+
             default:
                 return clientName
         }
@@ -865,9 +868,9 @@ const SubteamsInfoDialog = (props: {
 
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
-            <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] min-h-[60%] p-0 select-none">
-                <div className="flex">
-                    <SidebarGroup className="w-[30%] select-none">
+            <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] h-[80vh] p-0 select-none">
+                <div className="flex h-full w-full overflow-hidden">
+                    <SidebarGroup className="w-[30%] h-full overflow-y-auto border-r select-none">
                         <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
@@ -915,8 +918,7 @@ const SubteamsInfoDialog = (props: {
                         </SidebarGroupContent>
                     </SidebarGroup>
 
-                    <Separator orientation="vertical" />
-                    <div className="flex-grow-1 m-4">
+                    <div className="flex flex-col p-4 h-full min-h-0 overflow-hidden">
                         <EditDetailsDialog
                             open={editDetailsOpen}
                             onOpenChange={setEditDetailsOpen}
@@ -960,7 +962,7 @@ const SubteamsInfoDialog = (props: {
                             </div>
                         </div>
 
-                        <div className="flex flex-col mt-2">
+                        <div className="flex flex-grow-1 flex-col mt-2 overflow-y-auto min-h-0">
                             {
                                 Object.keys(bindleDefinitions).map((sharedResource) => (
                                     <div className="flex flex-col mt-2">
@@ -975,7 +977,7 @@ const SubteamsInfoDialog = (props: {
 
                                                 return (
                                                     <div className="flex border-1 p-2 rounded-md mt-2 items-center">
-                                                        <div className="flex flex-col text-sm flex-grow-1">
+                                                        <div className="flex flex-col text-sm flex-grow-1 mr-6">
                                                             <p>{bindleDefinition.friendlyName}</p>
                                                             <p className="text-muted-foreground text-sm">{bindleDefinition.description}</p>
                                                         </div>
@@ -1001,7 +1003,7 @@ const SubteamsInfoDialog = (props: {
                             }
                         </div>
 
-                        <DialogFooter className="absolute bottom-4 right-4 flex gap-2">
+                        <DialogFooter className="mt-4 flex-grow-1">
                             <DialogClose asChild>
                                 <Button variant="outline">Cancel</Button>
                             </DialogClose>

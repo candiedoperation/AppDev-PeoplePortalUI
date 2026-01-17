@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { BanIcon, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -38,6 +38,7 @@ export interface TeamInfo {
         seasonType: string,
         seasonYear: number,
         rootTeamSettings?: any
+        flaggedForDeletion?: boolean
     }
 }
 
@@ -298,7 +299,7 @@ export const DashboardTeamInfo = () => {
             />
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
             <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
-            <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} />
+            <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} parentTeamId={teamInfo?.pk} />
             <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveRootTeamSettings} onTeamInfoChange={handleTeamInfoChange} />
 
 
@@ -355,7 +356,7 @@ export const DashboardTeamInfo = () => {
                 <TabsList>
                     <TabsTrigger value="owner">Team Owners</TabsTrigger>
                     {
-                        subTeams?.map((subteam) => {
+                        subTeams?.filter(st => !st.attributes.flaggedForDeletion).map((subteam) => {
                             let tabName = subteam.attributes.friendlyName;
                             if (tabName.endsWith("Engr"))
                                 tabName = "Engineering Team"
@@ -377,7 +378,7 @@ export const DashboardTeamInfo = () => {
                     </TabsContent>
 
                     {
-                        subTeams?.map((subteam) => (
+                        subTeams?.filter(st => !st.attributes.flaggedForDeletion).map((subteam) => (
                             <TabsContent value={subteam.name}>
                                 <UserInformationTable
                                     users={subteam.users ?? []}
@@ -658,7 +659,8 @@ const SubteamsInfoDialog = (props: {
     open: boolean,
     openChanged: (open: boolean) => void,
     subteams: TeamInfo[],
-    onRefresh: () => void
+    onRefresh: () => void,
+    parentTeamId?: string
 }) => {
     const [currentSubTeam, setCurrentSubTeam] = React.useState<TeamInfo>()
     const [bindleDefinitions, setBindleDefinitions] = React.useState<BindleDefinitionMap>({})
@@ -666,6 +668,9 @@ const SubteamsInfoDialog = (props: {
     const [isLoadingBindles, setIsLoadingBindles] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
     const [editDetailsOpen, setEditDetailsOpen] = React.useState(false);
+    const [subteamCreateOpen, setSubteamCreateOpen] = React.useState(false);
+    const [removeSubteamOpen, setRemoveSubteamOpen] = React.useState(false);
+    const [subteamToDelete, setSubteamToDelete] = React.useState<TeamInfo | undefined>();
 
     const sortedSubteams = React.useMemo(() => {
         return [...props.subteams].sort((a, b) => a.attributes.friendlyName.localeCompare(b.attributes.friendlyName))
@@ -798,6 +803,66 @@ const SubteamsInfoDialog = (props: {
         });
     }
 
+    const handleSubteamCreateSubmit = (name: string, description: string) => {
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        setIsSaving(true);
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${props.parentTeamId}/subteam`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                friendlyName: name,
+                description: description
+            })
+        }).then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.message || res.statusText) });
+            }
+            return res.json();
+        }).then(() => {
+            toast.success(`Subteam ${name} created successfully!`);
+            setSubteamCreateOpen(false);
+            props.onRefresh();
+        }).catch(err => {
+            toast.error(`Failed to create subteam: ${err.message}`);
+        }).finally(() => {
+            setIsSaving(false);
+        });
+    }
+
+    const handleSubteamDeleteSubmit = () => {
+        if (!subteamToDelete) return;
+
+        setIsSaving(true);
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${subteamToDelete.pk}`, {
+            method: "DELETE",
+        }).then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.message || res.statusText) });
+            }
+
+            // If response has body, parse it, else return null
+            return res.text().then(text => text ? JSON.parse(text) : {});
+        }).then(() => {
+            toast.success(`Subteam ${subteamToDelete.attributes.friendlyName} deleted successfully!`);
+            setRemoveSubteamOpen(false);
+            setSubteamToDelete(undefined);
+            props.onRefresh();
+        }).catch(err => {
+            toast.error(`Failed to delete subteam: ${err.message}`);
+        }).finally(() => {
+            setIsSaving(false);
+        });
+    }
+
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] min-h-[60%] p-0 select-none">
@@ -806,16 +871,46 @@ const SubteamsInfoDialog = (props: {
                         <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
+                                {/* Dynamic Subteam Population */}
                                 {sortedSubteams.map((subteam) => (
                                     <SidebarMenuItem key={subteam.pk}>
-                                        <SidebarMenuButton className="cursor-pointer" onClick={() => { setCurrentSubTeam(_ => subteam) }} isActive={currentSubTeam?.pk == subteam.pk} asChild>
+                                        <SidebarMenuButton
+                                            className="cursor-pointer"
+                                            onClick={() => { if (!subteam.attributes.flaggedForDeletion) setCurrentSubTeam(_ => subteam) }}
+                                            isActive={currentSubTeam?.pk == subteam.pk}
+                                            disabled={subteam.attributes.flaggedForDeletion}
+                                            asChild
+                                        >
                                             <a>
-                                                <Users2Icon />
-                                                <span>{subteam.attributes.friendlyName}</span>
+                                                <Users2Icon className={subteam.attributes.flaggedForDeletion ? "opacity-50" : ""} />
+                                                <span className={subteam.attributes.flaggedForDeletion ? "line-through opacity-50" : ""}>
+                                                    {subteam.attributes.friendlyName}
+                                                </span>
+                                                <div className="ml-auto">
+                                                    <Button
+                                                        onClick={(e) => { e.stopPropagation(); setSubteamToDelete(subteam); setRemoveSubteamOpen(true); }}
+                                                        disabled={subteam.attributes.flaggedForDeletion}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 hover:text-red-600 hover:bg-red-50"
+                                                    >
+                                                        {
+                                                            (subteam.attributes.flaggedForDeletion) ? <BanIcon size={15} /> :
+                                                                <Trash2Icon size={15} />
+                                                        }
+                                                    </Button>
+                                                </div>
                                             </a>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 ))}
+
+                                <SidebarMenuButton className="cursor-pointer" onClick={() => setSubteamCreateOpen(true)} asChild>
+                                    <a>
+                                        <SquarePlusIcon />
+                                        <span>Create new Subteam</span>
+                                    </a>
+                                </SidebarMenuButton>
                             </SidebarMenu>
                         </SidebarGroupContent>
                     </SidebarGroup>
@@ -829,8 +924,29 @@ const SubteamsInfoDialog = (props: {
                             description="Update the name and description for this subteam."
                             initialName={currentSubTeam?.attributes.friendlyName || ""}
                             initialDescription={currentSubTeam?.attributes.description || ""}
-                            onSave={handleSubteamInfoChange}
+                            onSave={(n, d) => { handleSubteamInfoChange(n, d); setEditDetailsOpen(false) }}
                         />
+
+                        <EditDetailsDialog
+                            open={subteamCreateOpen}
+                            onOpenChange={setSubteamCreateOpen}
+                            title="Create New Subteam"
+                            description="Add a new subteam to your team."
+                            initialName=""
+                            initialDescription=""
+                            onSave={handleSubteamCreateSubmit}
+                            isLoading={isSaving}
+                            submitText="Create Subteam"
+                        />
+
+                        <RemoveSubteamDialog
+                            open={removeSubteamOpen}
+                            onOpenChange={setRemoveSubteamOpen}
+                            subteam={subteamToDelete}
+                            onConfirm={handleSubteamDeleteSubmit}
+                            isLoading={isSaving}
+                        />
+
                         <div className="flex items-center gap-2">
                             <div className="flex flex-col flex-grow-1">
                                 <div className="flex items-center gap-2">
@@ -972,7 +1088,7 @@ const TeamSettingsDialog = (props: {
                         description="Update the name and description for your team."
                         initialName={localAttributes.friendlyName}
                         initialDescription={localAttributes.description}
-                        onSave={props.onTeamInfoChange}
+                        onSave={(n, d) => { props.onTeamInfoChange(n, d); setEditDetailsOpen(false) }}
                     />
                     <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
@@ -1057,7 +1173,9 @@ const EditDetailsDialog = (props: {
     description: string,
     initialName: string,
     initialDescription: string,
-    onSave: (name: string, description: string) => void
+    onSave: (name: string, description: string) => void,
+    isLoading?: boolean,
+    submitText?: string
 }) => {
     const [name, setName] = React.useState(props.initialName)
     const [description, setDescription] = React.useState(props.initialDescription)
@@ -1069,7 +1187,7 @@ const EditDetailsDialog = (props: {
 
     const handleSave = () => {
         props.onSave(name, description)
-        props.onOpenChange(false)
+        // props.onOpenChange(false) - Controlled by parent
     }
 
     return (
@@ -1103,7 +1221,10 @@ const EditDetailsDialog = (props: {
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSave}>Update Info</Button>
+                    <Button disabled={props.isLoading} onClick={handleSave}>
+                        <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
+                        {props.submitText ?? "Update Info"}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -1125,7 +1246,7 @@ const RemoveMemberDialog = (props: {
                     <DialogTitle>Confirm Member Removal</DialogTitle>
                     <DialogDescription>
                         Are you sure you want to remove <strong>{props.user?.name}</strong> from the <strong>{props.teamName}</strong> team?
-                        This will revoke their access to team resources immediately and send them a formal email.
+                        This will revoke their access to team resources immediately.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
@@ -1133,6 +1254,54 @@ const RemoveMemberDialog = (props: {
                     <Button variant="destructive" disabled={props.isLoading} onClick={props.onConfirm}>
                         <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
                         Remove Member
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const RemoveSubteamDialog = (props: {
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    subteam?: TeamInfo,
+    onConfirm: () => void,
+    isLoading: boolean
+}) => {
+    const [confirmName, setConfirmName] = React.useState("")
+
+    React.useEffect(() => {
+        if (props.open) {
+            setConfirmName("")
+        }
+    }, [props.open])
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete {props.subteam?.attributes.friendlyName} Subteam?</DialogTitle>
+                    <DialogDescription>
+                        This action cannot be undone and will remove all members from this subteam. Additionally, all subteam members
+                        will lose access to inherited team resources immideately.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Input
+                    value={confirmName}
+                    onChange={(e) => setConfirmName(e.target.value)}
+                    placeholder={`Type "${props.subteam?.attributes.friendlyName}" to confirm`}
+                />
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
+                    <Button
+                        variant="destructive"
+                        disabled={props.isLoading || confirmName !== props.subteam?.attributes.friendlyName}
+                        onClick={props.onConfirm}
+                    >
+                        <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
+                        Delete {props.subteam?.attributes.friendlyName} Subteam
                     </Button>
                 </DialogFooter>
             </DialogContent>

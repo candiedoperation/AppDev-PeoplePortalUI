@@ -146,20 +146,7 @@ export const DashboardTeamInfo = () => {
         });
     }
 
-    function saveTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }, attributes?: { friendlyName: string, description: string }) {
-        // 1. Validate attributes first if provided
-        if (attributes) {
-            if (!attributes.friendlyName?.trim()) {
-                toast.error("Name cannot be blank!");
-                return;
-            }
-
-            if (!attributes.description?.trim()) {
-                toast.error("Description cannot be blank!");
-                return;
-            }
-        }
-
+    function saveRootTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }) {
         setIsSavingSettings(true);
 
         // 2. Save settings to server first
@@ -171,24 +158,6 @@ export const DashboardTeamInfo = () => {
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Settings Update Failed: HTTP ${response.status}`);
-                }
-
-                // 3. Save attributes if provided and changed, only after settings are saved
-                const hasAttributeChanges = attributes && (
-                    attributes.friendlyName !== teamInfo?.attributes.friendlyName ||
-                    attributes.description !== teamInfo?.attributes.description
-                );
-
-                if (hasAttributeChanges) {
-                    return fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(attributes)
-                    }).then(attrResponse => {
-                        if (!attrResponse.ok) {
-                            throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
-                        }
-                    });
                 }
             })
             .then(() => {
@@ -202,6 +171,36 @@ export const DashboardTeamInfo = () => {
             .finally(() => {
                 setIsSavingSettings(false);
             });
+    }
+
+    const handleTeamInfoChange = (name: string, description: string) => {
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                friendlyName: name,
+                description: description
+            })
+        }).then(attrResponse => {
+            if (!attrResponse.ok) {
+                throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
+            }
+
+            toast.success(`Updated details for ${name}!`);
+            refreshTeamInfo();
+        }).catch(e => {
+            toast.error(`Failed to update team details: ${e.message}`);
+        });
     }
 
     function generateAWSMagicLink() {
@@ -300,7 +299,7 @@ export const DashboardTeamInfo = () => {
             <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
             <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
             <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} />
-            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveTeamSettings} />
+            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveRootTeamSettings} onTeamInfoChange={handleTeamInfoChange} />
 
 
             <div className="flex items-center">
@@ -731,20 +730,10 @@ const SubteamsInfoDialog = (props: {
     const updateSubTeamBindles = () => {
         if (!currentSubTeam) return;
 
-        // 0. Validate subteam attributes first
-        if (!currentSubTeam.attributes.friendlyName?.trim()) {
-            toast.error(`Name cannot be blank!`);
-            return;
-        }
-
-        if (!currentSubTeam.attributes.description?.trim()) {
-            toast.error(`Description cannot be blank!`);
-            return;
-        }
-
         setIsSaving(true);
         const friendlyName = currentSubTeam.attributes.friendlyName
-        // 1. Update bindles first
+
+        // 1. Update bindles
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}/bindles`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
@@ -753,28 +742,6 @@ const SubteamsInfoDialog = (props: {
             .then(response => {
                 if (!response.ok) {
                     throw new Error(`Bindle Update Failed: HTTP ${response.status}`);
-                }
-
-                // 2. Update subteam attributes if changed, only after bindles are saved
-                const originalSubteam = props.subteams.find(s => s.pk === currentSubTeam.pk);
-                const hasAttributeChanges = originalSubteam && (
-                    originalSubteam.attributes.friendlyName !== currentSubTeam.attributes.friendlyName ||
-                    originalSubteam.attributes.description !== currentSubTeam.attributes.description
-                );
-
-                if (hasAttributeChanges) {
-                    return fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            friendlyName: currentSubTeam.attributes.friendlyName,
-                            description: currentSubTeam.attributes.description
-                        })
-                    }).then(attrResponse => {
-                        if (!attrResponse.ok) {
-                            throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
-                        }
-                    });
                 }
             })
             .then(() => {
@@ -789,15 +756,46 @@ const SubteamsInfoDialog = (props: {
             });
     }
 
-    const handleSaveDetails = (name: string, description: string) => {
-        setCurrentSubTeam(prev => prev ? ({
-            ...prev,
-            attributes: {
-                ...prev.attributes,
+    const handleSubteamInfoChange = (name: string, description: string) => {
+        if (!currentSubTeam) return;
+
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
                 friendlyName: name,
                 description: description
+            })
+        }).then(attrResponse => {
+            if (!attrResponse.ok) {
+                throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
             }
-        }) : prev)
+
+            toast.success(`Updated details for ${name}!`);
+            props.onRefresh();
+
+            setCurrentSubTeam(prev => prev ? ({
+                ...prev,
+                attributes: {
+                    ...prev.attributes,
+                    friendlyName: name,
+                    description: description
+                }
+            }) : prev)
+
+        }).catch(e => {
+            toast.error(`Failed to update subteam details: ${e.message}`);
+        });
     }
 
     return (
@@ -831,22 +829,20 @@ const SubteamsInfoDialog = (props: {
                             description="Update the name and description for this subteam."
                             initialName={currentSubTeam?.attributes.friendlyName || ""}
                             initialDescription={currentSubTeam?.attributes.description || ""}
-                            onSave={handleSaveDetails}
+                            onSave={handleSubteamInfoChange}
                         />
                         <div className="flex items-center gap-2">
                             <div className="flex flex-col flex-grow-1">
                                 <div className="flex items-center gap-2">
                                     <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer" onClick={() => setEditDetailsOpen(true)}>
-                                        <PencilIcon size={16} />
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 ml-[-5px] cursor-pointer" onClick={() => setEditDetailsOpen(true)}>
+                                        <PencilIcon />
                                     </Button>
                                     {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
                                 </div>
                                 <p className="text-muted-foreground">{currentSubTeam?.attributes.description}</p>
                             </div>
                         </div>
-
-                        <Separator className="my-4" />
 
                         <div className="flex flex-col mt-2">
                             {
@@ -895,7 +891,7 @@ const SubteamsInfoDialog = (props: {
                             </DialogClose>
                             <Button disabled={isSaving} onClick={updateSubTeamBindles}>
                                 <Loader2Icon className={cn("animate-spin", !isSaving ? "hidden" : "")} />
-                                Save Changes for Current Subteam
+                                Save Changes for {currentSubTeam?.attributes.friendlyName}
                             </Button>
                         </DialogFooter>
                     </div>
@@ -911,7 +907,8 @@ const TeamSettingsDialog = (props: {
     teamInfo?: TeamInfo,
     settingDefinitions: RootTeamSettingMap,
     isSaving: boolean,
-    onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }, attributes?: { friendlyName: string, description: string }) => void
+    onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void,
+    onTeamInfoChange: (name: string, description: string) => void
 }) => {
     // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
     const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
@@ -975,28 +972,27 @@ const TeamSettingsDialog = (props: {
                         description="Update the name and description for your team."
                         initialName={localAttributes.friendlyName}
                         initialDescription={localAttributes.description}
-                        onSave={(name, description) => setLocalAttributes({ friendlyName: name, description: description })}
+                        onSave={props.onTeamInfoChange}
                     />
                     <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
 
-                    <div className="flex flex-col gap-4 mt-4">
+                    <div className="flex flex-col mt-4">
+                        {/* Static, Rename Settings */}
+                        <p className="text-muted-foreground text-sm">Team Information</p>
                         <div className="flex border-1 p-2 rounded-md mt-2 items-center">
                             <div className="flex flex-col text-sm flex-grow-1">
-                                <p>Team Identity</p>
+                                <p>Name and Description</p>
                                 <p className="text-muted-foreground text-sm">Configure your team's name and description</p>
                             </div>
 
                             <Button variant="outline" size="sm" onClick={() => setEditDetailsOpen(true)}>Edit Details</Button>
                         </div>
 
-                        <Separator />
-                    </div>
-
-                    <div className="flex flex-col mt-2">
                         {
+                            /* Dynamic Root Team Settings */
                             Object.keys(props.settingDefinitions).map((clientName) => (
-                                <div key={clientName} className="flex flex-col mt-2">
+                                <div key={clientName} className="flex flex-col mt-4">
                                     <p className="text-muted-foreground text-sm">{normalizeClientName(clientName)}</p>
                                     {
                                         Object.keys(props.settingDefinitions[clientName]).map((settingKey) => {
@@ -1024,7 +1020,7 @@ const TeamSettingsDialog = (props: {
                         <DialogClose asChild>
                             <Button variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button disabled={props.isSaving} onClick={() => props.onSave(changedSettings, localAttributes)}>
+                        <Button disabled={props.isSaving} onClick={() => props.onSave(changedSettings)}>
                             <Loader2Icon className={cn("animate-spin", !props.isSaving ? "hidden" : "")} />
                             Save Changes
                         </Button>
@@ -1085,7 +1081,7 @@ const EditDetailsDialog = (props: {
                         {props.description}
                     </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-4 py-4">
+                <div className="grid gap-4">
                     <div className="grid gap-2">
                         <Label htmlFor="edit-details-name">Name</Label>
                         <Input
@@ -1107,7 +1103,7 @@ const EditDetailsDialog = (props: {
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSave}>OK</Button>
+                    <Button onClick={handleSave}>Update Info</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

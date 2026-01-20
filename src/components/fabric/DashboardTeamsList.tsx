@@ -1,5 +1,4 @@
 import React, { useRef } from "react"
-import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { toast } from "sonner"
@@ -49,10 +48,51 @@ export const DashboardTeamsList = () => {
     const [allTeamsDialogOpen, setAllTeamsDialogOpen] = React.useState(false);
 
     const columns: ColumnDef<TeamInformationBrief>[] = [
-        { accessorKey: 'friendlyName', header: "Team Name" },
-        { accessorKey: 'description', header: "Description" },
-        { accessorKey: 'teamType', header: "Team Vertical" },
-        { accessorKey: "name", header: "Shared Resources ID" }
+        {
+            accessorKey: 'friendlyName',
+            header: "Team Name",
+            cell: ({ row }) => (
+                <div className="flex items-center">
+                    <Avatar className="h-9 w-9 rounded-lg border">
+                        <AvatarImage />
+                        <AvatarFallback className="rounded-lg bg-orange-100 text-orange-600">
+                            <UsersRound size={18} />
+                        </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col ml-3">
+                        <span className="font-medium text-sm">{row.original.friendlyName}</span>
+                        <span className="text-xs text-muted-foreground">{`${row.original.seasonType} ${row.original.seasonYear}`}</span>
+                    </div>
+                </div>
+            )
+        },
+        {
+            accessorKey: 'description',
+            header: "Description",
+            cell: ({ row }) => {
+                const str = row.original.description;
+                if (!str) return <span className="text-muted-foreground">No description</span>;
+                return <span className="text-sm text-muted-foreground line-clamp-1 max-w-[300px]" title={str}>{str}</span>;
+            }
+        },
+        {
+            accessorKey: 'teamType',
+            header: "Vertical",
+            cell: ({ row }) => (
+                <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
+                    {row.original.teamType}
+                </span>
+            )
+        },
+        {
+            accessorKey: "name",
+            header: "Shared Resources ID",
+            cell: ({ row }) => (
+                <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs text-muted-foreground">
+                    {row.original.name}
+                </code>
+            )
+        }
     ]
 
     const table = useReactTable({
@@ -98,7 +138,10 @@ export const DashboardTeamsList = () => {
                 openChanged={setAllTeamsDialogOpen}
             />
 
-            <div className="flex items-center py-4">
+            <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">Teams</h1>
+            <h4 className="text-xl text-muted-foreground">View and Manage teams</h4>
+
+            <div className="flex items-center py-4 mt-2">
                 <Input
                     placeholder="Start Typing to Filter by Name"
                     value={(table.getColumn("friendlyName")?.getFilterValue() as string) ?? ""}
@@ -145,38 +188,7 @@ export const DashboardTeamsList = () => {
                                         return (<TableCell key={cell.id}>
                                             {
                                                 flexRender(
-                                                    (() => {
-                                                        switch (cell.column.id) {
-                                                            case "memberSince": {
-                                                                return format(cell.getValue() as string, "PPP")
-                                                            }
-
-                                                            case "description": {
-                                                                const str = cell.getValue() as string
-                                                                if (str && str.length > 20)
-                                                                    return `${str.slice(0, 20)}...`
-
-                                                                return str
-                                                            }
-
-                                                            case "friendlyName": {
-                                                                return (
-                                                                    <div className="flex items-center">
-                                                                        <Avatar className="h-8 w-8 rounded-lg">
-                                                                            <AvatarImage />
-                                                                            <AvatarFallback className="rounded-lg"><UsersRound size="16" /></AvatarFallback>
-                                                                        </Avatar>
-                                                                        <div className="flex flex-col ml-2">
-                                                                            <span>{cell.getValue() as string}</span>
-                                                                            <span className="text-muted-foreground">{`${row.original.seasonType} ${row.original.seasonYear}`}</span>
-                                                                        </div>
-                                                                    </div>)
-                                                            }
-
-                                                            default:
-                                                                return cell.column.columnDef.cell;
-                                                        }
-                                                    })(),
+                                                    cell.column.columnDef.cell,
                                                     cell.getContext())
                                             }
                                         </TableCell>)

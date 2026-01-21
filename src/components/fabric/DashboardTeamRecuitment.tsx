@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { TeamInfo, TeamInfoResponse } from "./DashboardTeamInfo";
 import { RecruitmentStatistics } from "./RecruitmentStatistics";
-import { Link, Navigate, NavLink, useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Switch } from "../ui/switch";

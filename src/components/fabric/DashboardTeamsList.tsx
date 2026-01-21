@@ -1,4 +1,4 @@
-import React, { useRef } from "react"
+import React from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { toast } from "sonner"
@@ -8,10 +8,9 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { AlertTriangleIcon, ExternalLinkIcon, PlusIcon, UsersRound } from "lucide-react";
 import { Button } from "../ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { ORGANIZATION_NAME } from "@/commons/strings";
-import { Tooltip } from "../ui/tooltip";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from "../ui/select";
 import { Checkbox } from "../ui/checkbox";
@@ -20,12 +19,8 @@ import { useInfiniteQuery, QueryClient, QueryClientProvider } from "@tanstack/re
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Loader2 } from "lucide-react";
 
-export interface PaginationDefinition {
-
-}
 
 export interface GetTeamsListResponse {
-    pagination?: PaginationDefinition,
     teams: TeamInformationBrief[],
     nextCursor?: string
 }

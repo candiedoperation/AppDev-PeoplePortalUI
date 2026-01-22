@@ -742,7 +742,7 @@ const ATSApplyPage = ({
         }
 
         // Fetch team data with all subteam configs
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/teams/${params.teamId}`, { credentials: 'include' })
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/openteams/${params.teamId}`, { credentials: 'include' })
             .then(async (res) => {
                 if (!res.ok) {
                     const err = await res.json()

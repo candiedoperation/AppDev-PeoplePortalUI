@@ -19,7 +19,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ProgressUpdateDialog } from "../fragments/ProgressUpdateDialog";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
 
 export interface TeamInfoResponse {
@@ -918,7 +917,7 @@ const SubteamsInfoDialog = (props: {
                         </SidebarGroupContent>
                     </SidebarGroup>
 
-                    <div className="flex flex-col p-4 h-full min-h-0 overflow-hidden">
+                    <div className="flex flex-col flex-grow-1 p-4 h-full min-h-0 overflow-hidden">
                         <EditDetailsDialog
                             open={editDetailsOpen}
                             onOpenChange={setEditDetailsOpen}

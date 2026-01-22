@@ -13,7 +13,7 @@ import { Input } from "../ui/input";
 import { ORGANIZATION_NAME } from "@/commons/strings";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "../ui/command";
-import { cn } from "@/lib/utils";
+import { cn, readNDJSONStream } from "@/lib/utils";
 import type { GetUserListResponse } from "./DashboardPeopleList";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
@@ -120,20 +120,7 @@ export const DashboardTeamInfo = () => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/syncbindles`, {
             method: "PATCH"
         }).then(async response => {
-            if (!response.body) {
-                console.error("no body")
-                return
-            }
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done)
-                    break;
-
-                const update = JSON.parse(decoder.decode(value, { stream: true }));
+            for await (const update of readNDJSONStream<any>(response)) {
                 setSyncDialogProgress(update.progressPercent)
                 setSyncDialogStatus(update.status)
             }
@@ -213,40 +200,19 @@ export const DashboardTeamInfo = () => {
 
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/awsaccess`)
             .then(async response => {
-                if (!response.body) return console.error("no body");
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const textChunk = decoder.decode(value, { stream: true });
-                    const updates: any[] = [];
-
-                    try {
-                        updates.push(JSON.parse(textChunk));
-                    } catch {
-                        (textChunk.match(/\{.*?\}/g) || []).forEach(m => {
-                            try { updates.push(JSON.parse(m)); } catch { }
-                        });
+                for await (const update of readNDJSONStream<any>(response)) {
+                    if (update.error) {
+                        toast.error(update.status);
+                        setSyncDialogOpen(false);
+                        return;
                     }
 
-                    for (const update of updates) {
-                        if (update.error) {
-                            toast.error(update.status);
-                            setSyncDialogOpen(false);
-                            return;
-                        }
+                    setSyncDialogProgress(update.progressPercent);
+                    setSyncDialogStatus(update.status);
 
-                        setSyncDialogProgress(update.progressPercent);
-                        setSyncDialogStatus(update.status);
-
-                        if (update.link) {
-                            setSyncDialogOpen(false);
-                            window.open(update.link, "_blank");
-                        }
+                    if (update.link) {
+                        setSyncDialogOpen(false);
+                        window.open(update.link, "_blank");
                     }
                 }
             }).catch(e => {

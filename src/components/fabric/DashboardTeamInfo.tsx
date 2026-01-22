@@ -92,8 +92,16 @@ export const DashboardTeamInfo = () => {
 
     const refreshTeamInfo = () => {
         return Promise.all([
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(r => r.json()),
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(r => r.json())
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || "Failed to fetch team");
+                return data;
+            }),
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || "Failed to fetch settings");
+                return data;
+            })
         ])
             .then(([teamlistResponse, definitions]) => {
                 setTeamInfo(teamlistResponse.team)
@@ -155,9 +163,10 @@ export const DashboardTeamInfo = () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settings)
         })
-            .then(response => {
+            .then(async response => {
                 if (!response.ok) {
-                    throw new Error(`Settings Update Failed: HTTP ${response.status}`);
+                    const responseData = await response.json();
+                    throw new Error(responseData.message || `Settings Update Failed: HTTP ${response.status}`);
                 }
             })
             .then(() => {
@@ -191,9 +200,10 @@ export const DashboardTeamInfo = () => {
                 friendlyName: name,
                 description: description
             })
-        }).then(attrResponse => {
+        }).then(async attrResponse => {
             if (!attrResponse.ok) {
-                throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
+                const responseData = await attrResponse.json();
+                throw new Error(responseData.message || `Attributes Update Failed: HTTP ${attrResponse.status}`);
             }
 
             toast.success(`Updated details for ${name}!`);
@@ -270,14 +280,15 @@ export const DashboardTeamInfo = () => {
             credentials: "include",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ userPk: user.pk })
-        }).then((res) => {
+        }).then(async (res) => {
             if (res.ok) {
                 toast.success(`Removed ${user.name} from ${teamName}!`);
                 refreshTeamInfo();
                 setRemoveMemberDialogOpen(false);
                 setRemovalPendingInfo(null);
             } else {
-                toast.error(`Failed to remove ${user.name}: HTTP ${res.status}`);
+                const errorData = await res.json();
+                toast.error(`Failed to remove ${user.name}: ${errorData.message || `HTTP ${res.status}`}`);
             }
         }).catch((err) => {
             toast.error(`Failed to remove ${user.name}: ${err.message}`);
@@ -746,9 +757,10 @@ const SubteamsInfoDialog = (props: {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(enabledBindles)
         })
-            .then(response => {
+            .then(async response => {
                 if (!response.ok) {
-                    throw new Error(`Bindle Update Failed: HTTP ${response.status}`);
+                    const responseData = await response.json();
+                    throw new Error(responseData.message || `Bindle Update Failed: HTTP ${response.status}`);
                 }
             })
             .then(() => {
@@ -783,9 +795,10 @@ const SubteamsInfoDialog = (props: {
                 friendlyName: name,
                 description: description
             })
-        }).then(attrResponse => {
+        }).then(async attrResponse => {
             if (!attrResponse.ok) {
-                throw new Error(`Attributes Update Failed: HTTP ${attrResponse.status}`);
+                const responseData = await attrResponse.json();
+                throw new Error(responseData.message || `Attributes Update Failed: HTTP ${attrResponse.status}`);
             }
 
             toast.success(`Updated details for ${name}!`);

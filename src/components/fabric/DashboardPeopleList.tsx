@@ -22,7 +22,8 @@ export interface PaginationDefinition {
 
 export interface GetUserListResponse {
     pagination: PaginationDefinition,
-    users: UserInformationBrief[]
+    users: UserInformationBrief[],
+    message?: string /* Only when Request Fails */
 }
 
 export interface UserInformationBrief {
@@ -140,8 +141,10 @@ export const DashboardPeopleList = () => {
 
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people?${params.toString()}`)
             .then(async (response) => {
-                if (!response.ok) throw new Error("Failed to fetch");
                 const userlistResponse: GetUserListResponse = await response.json()
+                if (!response.ok)
+                    throw new Error(userlistResponse.message || "Failed to fetch");
+
                 setPeopleList(userlistResponse.users)
                 setTotalPages(userlistResponse.pagination.total_pages)
             })

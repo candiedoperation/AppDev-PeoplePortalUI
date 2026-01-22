@@ -104,7 +104,10 @@ export const DashboardTeamsList = () => {
     const refreshList = () => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/myteams`)
             .then(async (response) => {
-                const teamlistResponse: GetTeamsListResponse = await response.json()
+                const teamlistResponse: any = await response.json()
+                if (!response.ok)
+                    throw new Error(teamlistResponse.message || "Failed to fetch");
+
                 setPeopleList(teamlistResponse.teams)
             })
 

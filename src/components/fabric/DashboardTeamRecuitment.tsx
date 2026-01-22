@@ -370,7 +370,10 @@ export const DashboardTeamRecruitment = () => {
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
             .then(async (response) => {
-                const teamlistResponse: TeamInfoResponse = await response.json()
+                const teamlistResponse: any = await response.json()
+                if (!response.ok)
+                    throw new Error(teamlistResponse.message || "Failed to fetch");
+
                 setTeamInfo(teamlistResponse.team)
                 setSubTeams(teamlistResponse.subteams)
 

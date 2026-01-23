@@ -419,17 +419,15 @@ const AllTeamsListDialogContent = ({ open, openChanged }: { open: boolean, openC
                 <DialogHeader>
                     <DialogTitle>All Teams</DialogTitle>
                     <DialogDescription>
-                        Browse all active teams in the organization from here.
+                        Browse all active teams in the organization here!
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="py-2">
-                    <Input
-                        placeholder="Search for a team..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                </div>
+                <Input
+                    placeholder="Search for a team..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                />
 
                 <div
                     ref={setParentRef}

@@ -40,7 +40,6 @@ export type { DragEndEvent } from '@dnd-kit/core';
 type KanbanItemProps = {
   id: string;
   name: string;
-  column: string;
 } & Record<string, unknown>;
 
 type KanbanColumnProps = {
@@ -55,12 +54,14 @@ type KanbanContextProps<
   columns: C[];
   data: T[];
   activeCardId: string | null;
+  columnKey: string;
 };
 
 const KanbanContext = createContext<KanbanContextProps>({
   columns: [],
   data: [],
   activeCardId: null,
+  columnKey: 'column',
 });
 
 export type KanbanBoardProps = {
@@ -166,8 +167,8 @@ export const KanbanCards = <T extends KanbanItemProps = KanbanItemProps>({
   className,
   ...props
 }: KanbanCardsProps<T>) => {
-  const { data } = useContext(KanbanContext) as KanbanContextProps<T>;
-  const filteredData = data.filter((item) => item.column === props.id);
+  const { data, columnKey } = useContext(KanbanContext) as KanbanContextProps<T>;
+  const filteredData = data.filter((item) => item[columnKey] === props.id);
   const items = filteredData.map((item) => item.id);
 
   return (
@@ -199,6 +200,7 @@ export type KanbanProviderProps<
   className?: string;
   columns: C[];
   data: T[];
+  columnKey?: string;
   onDataChange?: (data: T[]) => void;
   onDragStart?: (event: DragStartEvent) => void;
   onDragEnd?: (event: DragEndEvent) => void;
@@ -216,6 +218,7 @@ export const KanbanProvider = <
   className,
   columns,
   data,
+  columnKey = 'column',
   onDataChange,
   ...props
 }: KanbanProviderProps<T, C>) => {
@@ -258,9 +261,9 @@ export const KanbanProvider = <
       return;
     }
 
-    const activeColumn = activeItem.column;
+    const activeColumn = activeItem[columnKey] as string;
     const overColumn =
-      overItem?.column ||
+      (overItem?.[columnKey] as string) ||
       columns.find(col => col.id === over.id)?.id ||
       columns[0]?.id;
 
@@ -269,7 +272,10 @@ export const KanbanProvider = <
       const activeIndex = newData.findIndex((item) => item.id === active.id);
       const overIndex = newData.findIndex((item) => item.id === over.id);
 
-      newData[activeIndex].column = overColumn;
+      newData[activeIndex] = {
+        ...newData[activeIndex],
+        [columnKey]: overColumn
+      };
       newData = arrayMove(newData, activeIndex, overIndex);
 
       onDataChange?.(newData);
@@ -301,9 +307,11 @@ export const KanbanProvider = <
 
   const announcements: Announcements = {
     onDragStart({ active }) {
-      const { name, column } = data.find((item) => item.id === active.id) ?? {};
+      const item = data.find((item) => item.id === active.id);
+      const name = item?.name;
+      const col = item?.[columnKey];
 
-      return `Picked up the card "${name}" from the "${column}" column`;
+      return `Picked up the card "${name}" from the "${col}" column`;
     },
     onDragOver({ active, over }) {
       const { name } = data.find((item) => item.id === active.id) ?? {};
@@ -325,7 +333,7 @@ export const KanbanProvider = <
   };
 
   return (
-    <KanbanContext.Provider value={{ columns, data, activeCardId }}>
+    <KanbanContext.Provider value={{ columns, data, activeCardId, columnKey }}>
       <DndContext
         accessibility={{ announcements }}
         collisionDetection={closestCenter}

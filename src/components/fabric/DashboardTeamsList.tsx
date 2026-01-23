@@ -228,8 +228,10 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const [teamType, setTeamType] = React.useState("");
     const [teamYear] = React.useState<number>(new Date().getFullYear())
     const [projectLeadConfirmed, setProjectLeadConfirmed] = React.useState(false)
+    const [isLoading, setIsLoading] = React.useState(false)
 
     const handleFormSubmit = () => {
+        setIsLoading(true)
         fetch(submitURL, {
             method: "POST",
             credentials: "include",
@@ -250,6 +252,8 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
         }).catch((err) => {
             toast.error(`Team Creation Failed: ${err.message}`)
             props.openChanged(false)
+        }).finally(() => {
+            setIsLoading(false)
         })
     }
 
@@ -329,8 +333,9 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                     </DialogClose>
                     <Button
                         onClick={handleFormSubmit}
-                        disabled={(teamName.trim().length < 3) || !teamSeason || !teamType || (teamType == "PROJECT" ? !projectLeadConfirmed : false)}
+                        disabled={isLoading || (teamName.trim().length < 3) || !teamSeason || !teamType || (teamType == "PROJECT" ? !projectLeadConfirmed : false)}
                     >
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Create Team
                     </Button>
                 </DialogFooter>

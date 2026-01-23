@@ -307,7 +307,7 @@ export const DashboardTeamInfo = () => {
                 onConfirm={executeMemberRemoval}
                 isLoading={isRemovingMember}
             />
-            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
+            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} teamPk={teamInfo?.pk} />
             <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
             <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} parentTeamId={teamInfo?.pk} />
             <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveRootTeamSettings} onTeamInfoChange={handleTeamInfoChange} />
@@ -403,7 +403,7 @@ export const DashboardTeamInfo = () => {
     )
 }
 
-const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, openChanged: (open: boolean, refresh?: boolean) => void }) => {
+const AddTeamMembersDialog = (props: { teamPk?: string, subteams: TeamInfo[], open: boolean, openChanged: (open: boolean, refresh?: boolean) => void }) => {
     const [currentTab, setCurrentTab] = React.useState("")
     const [selectedSubTeam, setSelectedSubTeam] = React.useState<TeamInfo>()
     const [selectedExistingMember, setSelectedExistingMember] = React.useState<UserInformationBrief>()
@@ -412,7 +412,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
     const [isLoading, setIsLoading] = React.useState(false);
     const [isFormComplete, setIsFormComplete] = React.useState(false)
     const [inviteEmailAddress, setInviteEmailAddress] = React.useState("")
-    const [inviteName, setInviteName] = React.useState("")
+    const [inviteeName, setInviteeName] = React.useState("")
     const [roleTitle, setRoleTitle] = React.useState("")
 
     React.useEffect(() => {
@@ -421,11 +421,11 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
             (
                 currentTab === "existing"
                     ? !!selectedExistingMember
-                    : !!inviteEmailAddress.trim() && !!inviteName.trim()
+                    : !!inviteEmailAddress.trim() && !!inviteeName.trim()
             ))
     }, [
         selectedSubTeam, selectedExistingMember,
-        currentTab, roleTitle, inviteEmailAddress, inviteName
+        currentTab, roleTitle, inviteEmailAddress, inviteeName
     ])
 
     const handleMemberAdd = async () => {
@@ -439,7 +439,10 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userPk: selectedExistingMember.pk })
-            }).then((_res) => {
+            }).then(async (res) => {
+                if (!res.ok)
+                    throw new Error((await res.json()).message)
+
                 toast.success(`Added ${selectedExistingMember.name} to your team!`)
                 props.openChanged(false, true)
             }).catch((err) => {
@@ -447,23 +450,25 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                 props.openChanged(false)
             }).finally(() => { setIsLoading(false) })
         } else if (currentTab == "invite") {
-            if (!selectedSubTeam)
+            if (!selectedSubTeam || !props.teamPk)
                 return
 
             setIsLoading(true)
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/new`, {
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${props.teamPk}/externalinvite`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    inviteName,
-                    inviteEmail: inviteEmailAddress,
+                    inviteeName,
+                    inviteeEmail: inviteEmailAddress,
                     roleTitle,
-                    teamPk: selectedSubTeam.pk,
-                    inviterPk: 7 /* Fix this!! */
+                    subteamPk: selectedSubTeam.pk,
                 })
-            }).then((_res) => {
-                toast.success(`Invite for ${inviteName} sent to ${inviteEmailAddress}!`)
+            }).then(async (res) => {
+                if (!res.ok)
+                    throw new Error((await res.json()).message)
+
+                toast.success(`Invite for ${inviteeName} sent to ${inviteEmailAddress}!`)
                 props.openChanged(false, true)
             }).catch((err) => {
                 toast.error(`Failed to send invite to ${inviteEmailAddress}! Error: ${err.message}`)
@@ -505,7 +510,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                                 </Alert>
 
                                 <Label className="mt-2">Candidate's Name</Label>
-                                <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
+                                <Input value={inviteeName} onChange={(e) => setInviteeName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
 
                                 <Label className="mt-2">Candidate's Email Address</Label>
                                 <Input value={inviteEmailAddress} onChange={(e) => setInviteEmailAddress(e.target.value)} placeholder="Ex. atheesh@terpmail.umd.edu" />
@@ -516,7 +521,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                         <Label className="mt-2">Role Title</Label>
                         <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Ex. Software Engineer" />
 
-                        <Label className="mt-2">Permissions Group</Label>
+                        <Label className="mt-2">Select Subteam</Label>
                         <Popover modal open={subTeamSelectionOpen} onOpenChange={setSubTeamSelectionOpen}>
                             <PopoverTrigger asChild>
                                 <Button
@@ -883,14 +888,14 @@ const SubteamsInfoDialog = (props: {
             <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] h-[80vh] p-0 select-none">
                 <div className="flex h-full w-full overflow-hidden">
                     <SidebarGroup className="w-[30%] h-full overflow-y-auto border-r select-none">
-                        <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
+                        <SidebarGroupLabel className="mb-1">Subteams and Permissions</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
                                 {/* Dynamic Subteam Population */}
                                 {sortedSubteams.map((subteam) => (
                                     <SidebarMenuItem key={subteam.pk}>
                                         <SidebarMenuButton
-                                            className="cursor-pointer"
+                                            className="cursor-pointer h-8"
                                             onClick={() => { if (!subteam.attributes.flaggedForDeletion) setCurrentSubTeam(_ => subteam) }}
                                             isActive={currentSubTeam?.pk == subteam.pk}
                                             disabled={subteam.attributes.flaggedForDeletion}

@@ -241,11 +241,14 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                 seasonType: teamSeason,
                 description: teamDescription
             })
-        }).then((_res) => {
+        }).then(async (res) => {
+            if (!res.ok)
+                throw new Error((await res.json()).message);
+
             toast.success(`New ${teamType.toLowerCase()} team for ${teamName} (${teamSeason} ${teamYear}) successfully created!`)
             props.openChanged(false, true)
         }).catch((err) => {
-            toast.error(`Group Creation Failed! Error: ${err.message}`)
+            toast.error(`Team Creation Failed: ${err.message}`)
             props.openChanged(false)
         })
     }

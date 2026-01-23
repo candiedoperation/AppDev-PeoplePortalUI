@@ -130,16 +130,10 @@ export const CorpDashboard = () => {
     }, []);
 
     return (
-        <SidebarProvider
-            style={
-                {
-                    "--sidebar-width": "19rem",
-                } as React.CSSProperties
-            }
-        >
+        <SidebarProvider>
             <AppSidebar userInfo={userInfo} />
             <SidebarInset>
-                <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+                <header className="flex h-16 shrink-0 items-center gap-2 px-6">
                     <SidebarTrigger className="-ml-1" />
                     <Separator
                         orientation="vertical"
@@ -169,7 +163,7 @@ export const CorpDashboard = () => {
                         </BreadcrumbList>
                     </Breadcrumb>
                 </header>
-                <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                <div className="flex flex-1 flex-col gap-4 p-6 pt-0">
                     <Routes>
                         <Route path="/" element={<Navigate to="/org/people" />} />
                         <Route path="/org" element={<Navigate to="/org/people" />} />

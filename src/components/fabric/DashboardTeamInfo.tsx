@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { BanIcon, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -19,7 +19,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ProgressUpdateDialog } from "../fragments/ProgressUpdateDialog";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "../ui/sidebar";
-import { Separator } from "../ui/separator";
 import { Switch } from "../ui/switch";
 
 export interface TeamInfoResponse {
@@ -38,6 +37,7 @@ export interface TeamInfo {
         seasonType: string,
         seasonYear: number,
         rootTeamSettings?: any
+        flaggedForDeletion?: boolean
     }
 }
 
@@ -78,6 +78,10 @@ export const DashboardTeamInfo = () => {
     const [teamSettingsOpen, setTeamSettingsOpen] = React.useState(false);
     const [isSavingSettings, setIsSavingSettings] = React.useState(false);
 
+    const [removeMemberDialogOpen, setRemoveMemberDialogOpen] = React.useState(false);
+    const [isRemovingMember, setIsRemovingMember] = React.useState(false);
+    const [removalPendingInfo, setRemovalPendingInfo] = React.useState<{ user: UserInformationBrief, teamPk: string, teamName: string } | null>(null);
+
     const [syncDialogOpen, setSyncDialogOpen] = React.useState(false);
     const [syncDialogTitle, setSyncDialogTitle] = React.useState("");
     const [syncDialogDescription, setSyncDialogDescription] = React.useState("");
@@ -86,11 +90,18 @@ export const DashboardTeamInfo = () => {
 
 
 
-    React.useEffect(() => {
-        // Fetch team info and settings definitions in parallel
-        Promise.all([
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(r => r.json()),
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(r => r.json())
+    const refreshTeamInfo = () => {
+        return Promise.all([
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || "Failed to fetch team");
+                return data;
+            }),
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teamsettings`).then(async r => {
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.message || "Failed to fetch settings");
+                return data;
+            })
         ])
             .then(([teamlistResponse, definitions]) => {
                 setTeamInfo(teamlistResponse.team)
@@ -100,6 +111,10 @@ export const DashboardTeamInfo = () => {
             .catch((e) => {
                 toast.error("Failed to Fetch Team Information: " + e.message)
             })
+    }
+
+    React.useEffect(() => {
+        refreshTeamInfo()
     }, []);
 
     function syncBindles() {
@@ -139,44 +154,62 @@ export const DashboardTeamInfo = () => {
         });
     }
 
-    function saveTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }) {
+    function saveRootTeamSettings(settings: { [clientName: string]: { [settingKey: string]: boolean } }) {
         setIsSavingSettings(true);
 
-        // Optimistically update local state
-        setTeamInfo(prevTeamInfo => {
-            if (!prevTeamInfo) return prevTeamInfo;
-            return {
-                ...prevTeamInfo,
-                attributes: {
-                    ...prevTeamInfo.attributes,
-                    rootTeamSettings: settings
-                }
-            };
-        });
-
-        // Save to server
+        // 2. Save settings to server first
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}/updateconf`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(settings)
-        }).then(async response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`)
+        })
+            .then(async response => {
+                if (!response.ok) {
+                    const responseData = await response.json();
+                    throw new Error(responseData.message || `Settings Update Failed: HTTP ${response.status}`);
+                }
+            })
+            .then(() => {
+                toast.success("Team settings saved successfully!");
+                setTeamSettingsOpen(false);
+                return refreshTeamInfo();
+            })
+            .catch(e => {
+                toast.error(`Failed to save settings: ${e.message}`);
+            })
+            .finally(() => {
+                setIsSavingSettings(false);
+            });
+    }
+
+    const handleTeamInfoChange = (name: string, description: string) => {
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                friendlyName: name,
+                description: description
+            })
+        }).then(async attrResponse => {
+            if (!attrResponse.ok) {
+                const responseData = await attrResponse.json();
+                throw new Error(responseData.message || `Attributes Update Failed: HTTP ${attrResponse.status}`);
             }
 
-            toast.success("Team settings saved successfully!")
-            // Close the dialog on successful save
-            setTeamSettingsOpen(false);
+            toast.success(`Updated details for ${name}!`);
+            refreshTeamInfo();
         }).catch(e => {
-            toast.error(`Failed to save settings: ${e.message}`)
-            // Revert optimistic update on error by refetching
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
-                .then(async (response) => {
-                    const teamlistResponse: TeamInfoResponse = await response.json()
-                    setTeamInfo(teamlistResponse.team)
-                })
-        }).finally(() => {
-            setIsSavingSettings(false);
+            toast.error(`Failed to update team details: ${e.message}`);
         });
     }
 
@@ -231,13 +264,54 @@ export const DashboardTeamInfo = () => {
             });
     }
 
+    const handleRemoveMember = (user: UserInformationBrief, teamPk: string, teamName: string) => {
+        setRemovalPendingInfo({ user, teamPk, teamName });
+        setRemoveMemberDialogOpen(true);
+    }
+
+    const executeMemberRemoval = () => {
+        if (!removalPendingInfo) return;
+
+        const { user, teamPk, teamName } = removalPendingInfo;
+
+        setIsRemovingMember(true);
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${teamPk}/removemember`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userPk: user.pk })
+        }).then(async (res) => {
+            if (res.ok) {
+                toast.success(`Removed ${user.name} from ${teamName}!`);
+                refreshTeamInfo();
+                setRemoveMemberDialogOpen(false);
+                setRemovalPendingInfo(null);
+            } else {
+                const errorData = await res.json();
+                toast.error(`Failed to remove ${user.name}: ${errorData.message || `HTTP ${res.status}`}`);
+            }
+        }).catch((err) => {
+            toast.error(`Failed to remove ${user.name}: ${err.message}`);
+        }).finally(() => {
+            setIsRemovingMember(false);
+        });
+    }
+
     return (
         <div className="flex flex-col m-2">
-            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} />
-            <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
-            <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} />
-            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveTeamSettings} />
+            <RemoveMemberDialog
+                open={removeMemberDialogOpen}
+                onOpenChange={setRemoveMemberDialogOpen}
+                user={removalPendingInfo?.user}
+                teamName={removalPendingInfo?.teamName}
+                onConfirm={executeMemberRemoval}
+                isLoading={isRemovingMember}
+            />
 
+            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} teamPk={teamInfo?.pk} subteams={subTeams.filter((t) => !t.attributes.flaggedForDeletion)} />
+            <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
+            <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} parentTeamId={teamInfo?.pk} />
+            <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveRootTeamSettings} onTeamInfoChange={handleTeamInfoChange} />
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
@@ -292,7 +366,7 @@ export const DashboardTeamInfo = () => {
                 <TabsList>
                     <TabsTrigger value="owner">Team Owners</TabsTrigger>
                     {
-                        subTeams?.map((subteam) => {
+                        subTeams?.filter(st => !st.attributes.flaggedForDeletion).map((subteam) => {
                             let tabName = subteam.attributes.friendlyName;
                             if (tabName.endsWith("Engr"))
                                 tabName = "Engineering Team"
@@ -307,13 +381,19 @@ export const DashboardTeamInfo = () => {
 
                 <div className="">
                     <TabsContent value="owner">
-                        <UserInformationTable users={teamInfo?.users ?? []} />
+                        <UserInformationTable
+                            users={teamInfo?.users ?? []}
+                            onRemove={user => handleRemoveMember(user, teamInfo?.pk ?? "", teamInfo?.attributes.friendlyName ?? "")}
+                        />
                     </TabsContent>
 
                     {
-                        subTeams?.map((subteam) => (
+                        subTeams?.filter(st => !st.attributes.flaggedForDeletion).map((subteam) => (
                             <TabsContent value={subteam.name}>
-                                <UserInformationTable users={subteam.users ?? []} />
+                                <UserInformationTable
+                                    users={subteam.users ?? []}
+                                    onRemove={user => handleRemoveMember(user, subteam.pk, subteam.attributes.friendlyName)}
+                                />
                             </TabsContent>
                         ))
                     }
@@ -323,7 +403,7 @@ export const DashboardTeamInfo = () => {
     )
 }
 
-const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, openChanged: (open: boolean, refresh?: boolean) => void }) => {
+const AddTeamMembersDialog = (props: { teamPk?: string, subteams: TeamInfo[], open: boolean, openChanged: (open: boolean, refresh?: boolean) => void }) => {
     const [currentTab, setCurrentTab] = React.useState("")
     const [selectedSubTeam, setSelectedSubTeam] = React.useState<TeamInfo>()
     const [selectedExistingMember, setSelectedExistingMember] = React.useState<UserInformationBrief>()
@@ -332,7 +412,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
     const [isLoading, setIsLoading] = React.useState(false);
     const [isFormComplete, setIsFormComplete] = React.useState(false)
     const [inviteEmailAddress, setInviteEmailAddress] = React.useState("")
-    const [inviteName, setInviteName] = React.useState("")
+    const [inviteeName, setInviteeName] = React.useState("")
     const [roleTitle, setRoleTitle] = React.useState("")
 
     React.useEffect(() => {
@@ -341,11 +421,11 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
             (
                 currentTab === "existing"
                     ? !!selectedExistingMember
-                    : !!inviteEmailAddress.trim() && !!inviteName.trim()
+                    : !!inviteEmailAddress.trim() && !!inviteeName.trim()
             ))
     }, [
         selectedSubTeam, selectedExistingMember,
-        currentTab, roleTitle, inviteEmailAddress, inviteName
+        currentTab, roleTitle, inviteEmailAddress, inviteeName
     ])
 
     const handleMemberAdd = async () => {
@@ -359,7 +439,10 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userPk: selectedExistingMember.pk })
-            }).then((_res) => {
+            }).then(async (res) => {
+                if (!res.ok)
+                    throw new Error((await res.json()).message)
+
                 toast.success(`Added ${selectedExistingMember.name} to your team!`)
                 props.openChanged(false, true)
             }).catch((err) => {
@@ -367,23 +450,25 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                 props.openChanged(false)
             }).finally(() => { setIsLoading(false) })
         } else if (currentTab == "invite") {
-            if (!selectedSubTeam)
+            if (!selectedSubTeam || !props.teamPk)
                 return
 
             setIsLoading(true)
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/invites/new`, {
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${props.teamPk}/externalinvite`, {
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    inviteName,
-                    inviteEmail: inviteEmailAddress,
+                    inviteeName,
+                    inviteeEmail: inviteEmailAddress,
                     roleTitle,
-                    teamPk: selectedSubTeam.pk,
-                    inviterPk: 7 /* Fix this!! */
+                    subteamPk: selectedSubTeam.pk,
                 })
-            }).then((_res) => {
-                toast.success(`Invite for ${inviteName} sent to ${inviteEmailAddress}!`)
+            }).then(async (res) => {
+                if (!res.ok)
+                    throw new Error((await res.json()).message)
+
+                toast.success(`Invite for ${inviteeName} sent to ${inviteEmailAddress}!`)
                 props.openChanged(false, true)
             }).catch((err) => {
                 toast.error(`Failed to send invite to ${inviteEmailAddress}! Error: ${err.message}`)
@@ -425,7 +510,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                                 </Alert>
 
                                 <Label className="mt-2">Candidate's Name</Label>
-                                <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
+                                <Input value={inviteeName} onChange={(e) => setInviteeName(e.target.value)} placeholder="Ex. Atheesh Thirumalairajan" />
 
                                 <Label className="mt-2">Candidate's Email Address</Label>
                                 <Input value={inviteEmailAddress} onChange={(e) => setInviteEmailAddress(e.target.value)} placeholder="Ex. atheesh@terpmail.umd.edu" />
@@ -436,7 +521,7 @@ const AddTeamMembersDialog = (props: { subteams: TeamInfo[], open: boolean, open
                         <Label className="mt-2">Role Title</Label>
                         <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Ex. Software Engineer" />
 
-                        <Label className="mt-2">Permissions Group</Label>
+                        <Label className="mt-2">Select Subteam</Label>
                         <Popover modal open={subTeamSelectionOpen} onOpenChange={setSubTeamSelectionOpen}>
                             <PopoverTrigger asChild>
                                 <Button
@@ -587,23 +672,38 @@ const MembersFilterPopover = (props: { handleSelect: (member: UserInformationBri
 
 const SubteamsInfoDialog = (props: {
     open: boolean,
-    openChanged: (open: boolean) => void
-    subteams: TeamInfo[]
+    openChanged: (open: boolean) => void,
+    subteams: TeamInfo[],
+    onRefresh: () => void,
+    parentTeamId?: string
 }) => {
     const [currentSubTeam, setCurrentSubTeam] = React.useState<TeamInfo>()
     const [bindleDefinitions, setBindleDefinitions] = React.useState<BindleDefinitionMap>({})
     const [enabledBindles, setEnabledBindles] = React.useState<{ [key: string]: { [key: string]: boolean } }>({})
     const [isLoadingBindles, setIsLoadingBindles] = React.useState(false);
     const [isSaving, setIsSaving] = React.useState(false);
+    const [editDetailsOpen, setEditDetailsOpen] = React.useState(false);
+    const [subteamCreateOpen, setSubteamCreateOpen] = React.useState(false);
+    const [removeSubteamOpen, setRemoveSubteamOpen] = React.useState(false);
+    const [subteamToDelete, setSubteamToDelete] = React.useState<TeamInfo | undefined>();
 
     const sortedSubteams = React.useMemo(() => {
         return [...props.subteams].sort((a, b) => a.attributes.friendlyName.localeCompare(b.attributes.friendlyName))
     }, [props.subteams])
 
     React.useEffect(() => {
-        if (props.open)
-            setCurrentSubTeam(_ => sortedSubteams[0])
-    }, [props.open, sortedSubteams])
+        if (props.open && !currentSubTeam)
+            setCurrentSubTeam(sortedSubteams[0])
+    }, [props.open, sortedSubteams]);
+
+    // Sync currentSubTeam with updated props after refresh to reflect saved changes
+    React.useEffect(() => {
+        setCurrentSubTeam(prev => {
+            if (!prev) return prev;
+            const updated = props.subteams.find(s => s.pk === prev.pk);
+            return updated || prev;
+        });
+    }, [props.subteams])
 
     React.useEffect(() => {
         if (!currentSubTeam) return;
@@ -618,7 +718,7 @@ const SubteamsInfoDialog = (props: {
                 toast.error("Failed to Fetch Team Bindles: " + e.message)
             })
             .finally(() => { setIsLoadingBindles(false) })
-    }, [currentSubTeam])
+    }, [currentSubTeam?.pk])
 
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/bindles/definitions`)
@@ -642,27 +742,142 @@ const SubteamsInfoDialog = (props: {
             case "AppleAccountClient":
                 return "Apple Account"
 
+            case "PeoplePortalClient":
+                return "People Portal Access"
+
             default:
                 return clientName
         }
     }
 
-    function updateSubTeamBindles() {
-        if (!currentSubTeam) return
+    const updateSubTeamBindles = () => {
+        if (!currentSubTeam) return;
 
-        setIsSaving(true)
+        setIsSaving(true);
+        const friendlyName = currentSubTeam.attributes.friendlyName
+
+        // 1. Update bindles
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}/bindles`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(enabledBindles)
-        }).then(async response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`)
+        })
+            .then(async response => {
+                if (!response.ok) {
+                    const responseData = await response.json();
+                    throw new Error(responseData.message || `Bindle Update Failed: HTTP ${response.status}`);
+                }
+            })
+            .then(() => {
+                toast.success(`Settings updated for ${friendlyName}!`);
+                props.onRefresh();
+            })
+            .catch(e => {
+                toast.error(`Failed to update subteam: ${e.message}`);
+            })
+            .finally(() => {
+                setIsSaving(false);
+            });
+    }
+
+    const handleSubteamInfoChange = (name: string, description: string) => {
+        if (!currentSubTeam) return;
+
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${currentSubTeam.pk}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                friendlyName: name,
+                description: description
+            })
+        }).then(async attrResponse => {
+            if (!attrResponse.ok) {
+                const responseData = await attrResponse.json();
+                throw new Error(responseData.message || `Attributes Update Failed: HTTP ${attrResponse.status}`);
             }
 
-            toast.success(`Bindles updated for ${currentSubTeam.attributes.friendlyName}!`)
+            toast.success(`Updated details for ${name}!`);
+            props.onRefresh();
+
+            setCurrentSubTeam(prev => prev ? ({
+                ...prev,
+                attributes: {
+                    ...prev.attributes,
+                    friendlyName: name,
+                    description: description
+                }
+            }) : prev)
+
         }).catch(e => {
-            toast.error(`Failed to update bindles: ${e.message}`)
+            toast.error(`Failed to update subteam details: ${e.message}`);
+        });
+    }
+
+    const handleSubteamCreateSubmit = (name: string, description: string) => {
+        if (!name.trim()) {
+            toast.error("Name cannot be blank!");
+            return;
+        }
+
+        if (!description.trim()) {
+            toast.error("Description cannot be blank!");
+            return;
+        }
+
+        setIsSaving(true);
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${props.parentTeamId}/subteam`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                friendlyName: name,
+                description: description
+            })
+        }).then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.message || res.statusText) });
+            }
+            return res.json();
+        }).then(() => {
+            toast.success(`Subteam ${name} created successfully!`);
+            setSubteamCreateOpen(false);
+            props.onRefresh();
+        }).catch(err => {
+            toast.error(`Failed to create subteam: ${err.message}`);
+        }).finally(() => {
+            setIsSaving(false);
+        });
+    }
+
+    const handleSubteamDeleteSubmit = () => {
+        if (!subteamToDelete) return;
+
+        setIsSaving(true);
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${subteamToDelete.pk}`, {
+            method: "DELETE",
+        }).then(res => {
+            if (!res.ok) {
+                return res.json().then(err => { throw new Error(err.message || res.statusText) });
+            }
+
+            // If response has body, parse it, else return null
+            return res.text().then(text => text ? JSON.parse(text) : {});
+        }).then(() => {
+            toast.success(`Subteam ${subteamToDelete.attributes.friendlyName} deleted successfully!`);
+            setRemoveSubteamOpen(false);
+            setSubteamToDelete(undefined);
+            props.onRefresh();
+        }).catch(err => {
+            toast.error(`Failed to delete subteam: ${err.message}`);
         }).finally(() => {
             setIsSaving(false);
         });
@@ -670,35 +885,101 @@ const SubteamsInfoDialog = (props: {
 
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
-            <DialogContent className="min-w-[60%] min-h-[60%] p-0 select-none">
-                <div className="flex">
-                    <SidebarGroup className="w-[30%] select-none">
-                        <SidebarGroupLabel>Subteams and Permissions</SidebarGroupLabel>
+            <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-[60%] h-[80vh] p-0 select-none">
+                <div className="flex h-full w-full overflow-hidden">
+                    <SidebarGroup className="w-[30%] h-full overflow-y-auto border-r select-none">
+                        <SidebarGroupLabel className="mb-1">Subteams and Permissions</SidebarGroupLabel>
                         <SidebarGroupContent>
                             <SidebarMenu>
+                                {/* Dynamic Subteam Population */}
                                 {sortedSubteams.map((subteam) => (
                                     <SidebarMenuItem key={subteam.pk}>
-                                        <SidebarMenuButton className="cursor-pointer" onClick={() => { setCurrentSubTeam(_ => subteam) }} isActive={currentSubTeam?.pk == subteam.pk} asChild>
+                                        <SidebarMenuButton
+                                            className="cursor-pointer h-8"
+                                            onClick={() => { if (!subteam.attributes.flaggedForDeletion) setCurrentSubTeam(_ => subteam) }}
+                                            isActive={currentSubTeam?.pk == subteam.pk}
+                                            disabled={subteam.attributes.flaggedForDeletion}
+                                            asChild
+                                        >
                                             <a>
-                                                <Users2Icon />
-                                                <span>{subteam.attributes.friendlyName}</span>
+                                                <Users2Icon className={subteam.attributes.flaggedForDeletion ? "opacity-50" : ""} />
+                                                <span className={subteam.attributes.flaggedForDeletion ? "line-through opacity-50" : ""}>
+                                                    {subteam.attributes.friendlyName}
+                                                </span>
+                                                <div className="ml-auto">
+                                                    <Button
+                                                        onClick={(e) => { e.stopPropagation(); setSubteamToDelete(subteam); setRemoveSubteamOpen(true); }}
+                                                        disabled={subteam.attributes.flaggedForDeletion}
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 hover:text-red-600 hover:bg-red-50"
+                                                    >
+                                                        {
+                                                            (subteam.attributes.flaggedForDeletion) ? <BanIcon size={15} /> :
+                                                                <Trash2Icon size={15} />
+                                                        }
+                                                    </Button>
+                                                </div>
                                             </a>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 ))}
+
+                                <SidebarMenuButton className="cursor-pointer" onClick={() => setSubteamCreateOpen(true)} asChild>
+                                    <a>
+                                        <SquarePlusIcon />
+                                        <span>Create new Subteam</span>
+                                    </a>
+                                </SidebarMenuButton>
                             </SidebarMenu>
                         </SidebarGroupContent>
                     </SidebarGroup>
 
-                    <Separator orientation="vertical" />
-                    <div className="flex-grow-1 m-4">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
-                            {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
-                        </div>
-                        <h3 className="text-muted-foreground">{currentSubTeam?.attributes.description}</h3>
+                    <div className="flex flex-col flex-grow-1 p-4 h-full min-h-0 overflow-hidden">
+                        <EditDetailsDialog
+                            open={editDetailsOpen}
+                            onOpenChange={setEditDetailsOpen}
+                            title="Edit Subteam Details"
+                            description="Update the name and description for this subteam."
+                            initialName={currentSubTeam?.attributes.friendlyName || ""}
+                            initialDescription={currentSubTeam?.attributes.description || ""}
+                            onSave={(n, d) => { handleSubteamInfoChange(n, d); setEditDetailsOpen(false) }}
+                        />
 
-                        <div className="flex flex-col mt-2">
+                        <EditDetailsDialog
+                            open={subteamCreateOpen}
+                            onOpenChange={setSubteamCreateOpen}
+                            title="Create New Subteam"
+                            description="Add a new subteam to your team."
+                            initialName=""
+                            initialDescription=""
+                            onSave={handleSubteamCreateSubmit}
+                            isLoading={isSaving}
+                            submitText="Create Subteam"
+                        />
+
+                        <RemoveSubteamDialog
+                            open={removeSubteamOpen}
+                            onOpenChange={setRemoveSubteamOpen}
+                            subteam={subteamToDelete}
+                            onConfirm={handleSubteamDeleteSubmit}
+                            isLoading={isSaving}
+                        />
+
+                        <div className="flex items-center gap-2">
+                            <div className="flex flex-col flex-grow-1">
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl">{currentSubTeam?.attributes.friendlyName}</h1>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 ml-[-5px] cursor-pointer" onClick={() => setEditDetailsOpen(true)}>
+                                        <PencilIcon />
+                                    </Button>
+                                    {isLoadingBindles && <Loader2Icon className="animate-spin text-muted-foreground" size={20} />}
+                                </div>
+                                <p className="text-muted-foreground">{currentSubTeam?.attributes.description}</p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-grow-1 flex-col mt-2 overflow-y-auto min-h-0">
                             {
                                 Object.keys(bindleDefinitions).map((sharedResource) => (
                                     <div className="flex flex-col mt-2">
@@ -713,7 +994,7 @@ const SubteamsInfoDialog = (props: {
 
                                                 return (
                                                     <div className="flex border-1 p-2 rounded-md mt-2 items-center">
-                                                        <div className="flex flex-col text-sm flex-grow-1">
+                                                        <div className="flex flex-col text-sm flex-grow-1 mr-6">
                                                             <p>{bindleDefinition.friendlyName}</p>
                                                             <p className="text-muted-foreground text-sm">{bindleDefinition.description}</p>
                                                         </div>
@@ -739,7 +1020,7 @@ const SubteamsInfoDialog = (props: {
                             }
                         </div>
 
-                        <DialogFooter className="absolute bottom-4 right-4 flex gap-2">
+                        <DialogFooter className="mt-4 flex-grow-1">
                             <DialogClose asChild>
                                 <Button variant="outline">Cancel</Button>
                             </DialogClose>
@@ -761,10 +1042,13 @@ const TeamSettingsDialog = (props: {
     teamInfo?: TeamInfo,
     settingDefinitions: RootTeamSettingMap,
     isSaving: boolean,
-    onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void
+    onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void,
+    onTeamInfoChange: (name: string, description: string) => void
 }) => {
     // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
     const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
+    const [localAttributes, setLocalAttributes] = React.useState({ friendlyName: "", description: "" })
+    const [editDetailsOpen, setEditDetailsOpen] = React.useState(false)
 
     /* Initialize settings when dialog opens or teamInfo/settingDefinitions change */
     React.useEffect(() => {
@@ -786,6 +1070,10 @@ const TeamSettingsDialog = (props: {
         }
 
         setChangedSettings(initialSettings);
+        setLocalAttributes({
+            friendlyName: props.teamInfo.attributes.friendlyName || "",
+            description: props.teamInfo.attributes.description || ""
+        });
     }, [props.open, props.teamInfo, props.settingDefinitions]);
 
 
@@ -810,15 +1098,36 @@ const TeamSettingsDialog = (props: {
 
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
-            <DialogContent className="min-w-lg min-h-[60%] p-0 select-none">
+            <DialogContent onOpenAutoFocus={(e) => e.preventDefault()} className="min-w-lg min-h-[60%] p-0 select-none">
                 <div className="flex-grow-1 m-4">
+                    <EditDetailsDialog
+                        open={editDetailsOpen}
+                        onOpenChange={setEditDetailsOpen}
+                        title="Edit Team Details"
+                        description="Update the name and description for your team."
+                        initialName={localAttributes.friendlyName}
+                        initialDescription={localAttributes.description}
+                        onSave={(n, d) => { props.onTeamInfoChange(n, d); setEditDetailsOpen(false) }}
+                    />
                     <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
 
-                    <div className="flex flex-col mt-2">
+                    <div className="flex flex-col mt-4">
+                        {/* Static, Rename Settings */}
+                        <p className="text-muted-foreground text-sm">Team Information</p>
+                        <div className="flex border-1 p-2 rounded-md mt-2 items-center">
+                            <div className="flex flex-col text-sm flex-grow-1">
+                                <p>Name and Description</p>
+                                <p className="text-muted-foreground text-sm">Configure your team's name and description</p>
+                            </div>
+
+                            <Button variant="outline" size="sm" onClick={() => setEditDetailsOpen(true)}>Edit Details</Button>
+                        </div>
+
                         {
+                            /* Dynamic Root Team Settings */
                             Object.keys(props.settingDefinitions).map((clientName) => (
-                                <div key={clientName} className="flex flex-col mt-2">
+                                <div key={clientName} className="flex flex-col mt-4">
                                     <p className="text-muted-foreground text-sm">{normalizeClientName(clientName)}</p>
                                     {
                                         Object.keys(props.settingDefinitions[clientName]).map((settingKey) => {
@@ -873,5 +1182,148 @@ const CustomPopoverFilterBox = (props: React.ComponentProps<"input"> & { isLoadi
 
             <Loader2Icon className={`animate-spin ${(!props.isLoading) ? "invisible" : ""}`} />
         </div>
+    )
+}
+
+const EditDetailsDialog = (props: {
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    title: string,
+    description: string,
+    initialName: string,
+    initialDescription: string,
+    onSave: (name: string, description: string) => void,
+    isLoading?: boolean,
+    submitText?: string
+}) => {
+    const [name, setName] = React.useState(props.initialName)
+    const [description, setDescription] = React.useState(props.initialDescription)
+
+    React.useEffect(() => {
+        setName(props.initialName)
+        setDescription(props.initialDescription)
+    }, [props.open, props.initialName, props.initialDescription])
+
+    const handleSave = () => {
+        props.onSave(name, description)
+        // props.onOpenChange(false) - Controlled by parent
+    }
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{props.title}</DialogTitle>
+                    <DialogDescription>
+                        {props.description}
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4">
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit-details-name">Name</Label>
+                        <Input
+                            id="edit-details-name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Name"
+                        />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label htmlFor="edit-details-description">Description</Label>
+                        <Input
+                            id="edit-details-description"
+                            value={description}
+                            onChange={(e) => setDescription(e.target.value)}
+                            placeholder="Description"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
+                    <Button disabled={props.isLoading} onClick={handleSave}>
+                        <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
+                        {props.submitText ?? "Update Info"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const RemoveMemberDialog = (props: {
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    user?: UserInformationBrief,
+    teamName?: string,
+    onConfirm: () => void,
+    isLoading: boolean
+}) => {
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Confirm Member Removal</DialogTitle>
+                    <DialogDescription>
+                        Are you sure you want to remove <strong>{props.user?.name}</strong> from the <strong>{props.teamName}</strong> team?
+                        This will revoke their access to team resources immediately.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
+                    <Button variant="destructive" disabled={props.isLoading} onClick={props.onConfirm}>
+                        <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
+                        Remove Member
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+const RemoveSubteamDialog = (props: {
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    subteam?: TeamInfo,
+    onConfirm: () => void,
+    isLoading: boolean
+}) => {
+    const [confirmName, setConfirmName] = React.useState("")
+
+    React.useEffect(() => {
+        if (props.open) {
+            setConfirmName("")
+        }
+    }, [props.open])
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete {props.subteam?.attributes.friendlyName} Subteam?</DialogTitle>
+                    <DialogDescription>
+                        This action cannot be undone and will remove all members from this subteam. Additionally, all subteam members
+                        will lose access to inherited team resources immideately.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Input
+                    value={confirmName}
+                    onChange={(e) => setConfirmName(e.target.value)}
+                    placeholder={`Type "${props.subteam?.attributes.friendlyName}" to confirm`}
+                />
+
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
+                    <Button
+                        variant="destructive"
+                        disabled={props.isLoading || confirmName !== props.subteam?.attributes.friendlyName}
+                        onClick={props.onConfirm}
+                    >
+                        <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
+                        Delete {props.subteam?.attributes.friendlyName} Subteam
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     )
 }

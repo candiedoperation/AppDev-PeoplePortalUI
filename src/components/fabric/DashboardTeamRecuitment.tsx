@@ -2,9 +2,9 @@ import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
 import React from "react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { TeamInfo, TeamInfoResponse } from "./DashboardTeamInfo";
+import type { TeamInfo } from "./DashboardTeamInfo";
 import { RecruitmentStatistics } from "./RecruitmentStatistics";
-import { Link, Navigate, NavLink, useParams } from "react-router-dom";
+import { NavLink, useParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { Switch } from "../ui/switch";
@@ -12,7 +12,7 @@ import { Label } from "../ui/label";
 import { TagInput, type Tag } from 'emblor-maintained';
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon, ClipboardCheckIcon, PartyPopperIcon, HeadsetIcon, CopyCheckIcon, ThumbsDownIcon, AlertTriangleIcon } from "lucide-react";
+import { Loader2, Loader2Icon, ExternalLinkIcon, ChevronLeft, ChevronRight, MailIcon, ClipboardCheckIcon, PartyPopperIcon, HeadsetIcon, CopyCheckIcon, ThumbsDownIcon, AlertTriangleIcon, MessageSquarePlusIcon } from "lucide-react";
 import { KanbanBoard, KanbanCard, KanbanCards, KanbanHeader, KanbanProvider } from "../ui/shadcn-io/kanban";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -23,9 +23,10 @@ import { DialogFooter } from "../ui/dialog";
 import { Textarea } from "../ui/textarea";
 import { Timeline, TimelineItem } from "../ui/timeline";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
-
-
-
+import Ratings from "../ui/ratings";
+import { Editor } from "@/components/blocks/editor-00/editor";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface SubteamATSConfig {
     roles: string[]
@@ -33,28 +34,33 @@ interface SubteamATSConfig {
     isRecruiting: boolean
 }
 
-// Type definition for applications returned from backend
-
-
+// Lite object for Kanban
 interface KanbanApplicationCard {
     id: string;
     name: string;
-    column: string;
+    stage: string;
     applicantId: string;
+    rolePreferences: { role: string, subteamPk: string }[];
+    appliedAt: string;
+    stars: number;
+    [key: string]: unknown;  // Index signature for Kanban compatibility
+}
+
+
+// Full Details object for Modal
+interface KanbanApplicationDetails extends KanbanApplicationCard {
     email: string;
     profile: { [key: string]: string };
     responses: { [key: string]: string };
-    rolePreferences: { role: string, subteamPk: string }[];  // Ordered role preferences
     hiredSubteamPk?: string;
     hiredRole?: string;
-    appliedAt: string;
-    appDevInternalPk: number;
+    appDevInternalPk?: number;
+    notes?: string;
     stageHistory?: {
         stage: string;
         changedAt: string;
         changedBy?: string;
     }[];
-    [key: string]: unknown;  // Index signature for Kanban compatibility
 }
 
 interface StageDefinition {
@@ -83,8 +89,11 @@ export const DashboardTeamRecruitment = () => {
     const [recruitmentEnabled, setRecruitmentEnabled] = React.useState<{ [key: string]: boolean }>({})
     const [roleSpecQuestions, setRoleSpecQuestions] = React.useState<{ [key: string]: { [key: string]: string[] } }>({})
 
-    const [applications, setApplications] = React.useState<KanbanApplicationCard[]>([])  // UPDATED type
-    const [selectedApplication, setSelectedApplication] = React.useState<KanbanApplicationCard | null>(null)  // UPDATED type
+    const [applications, setApplications] = React.useState<KanbanApplicationCard[]>([])
+    const [selectedApplication, setSelectedApplication] = React.useState<KanbanApplicationCard | null>(null)
+    const [selectedApplicationDetails, setSelectedApplicationDetails] = React.useState<KanbanApplicationDetails | null>(null)
+    const [isLoadingDetails, setIsLoadingDetails] = React.useState(false)
+
     const [applicantUrls, setApplicantUrls] = React.useState<any | null>(null)
     const [otherApplications, setOtherApplications] = React.useState<any[]>([])
     const [dragStartColumn, setDragStartColumn] = React.useState<string | null>(null);
@@ -111,6 +120,11 @@ export const DashboardTeamRecruitment = () => {
     const [interviewGuidelines, setInterviewGuidelines] = React.useState("")
     const [saveInterviewGuidelines, setSaveInterviewGuidelines] = React.useState(false)
     const [hiredRole, setHiredRole] = React.useState("")
+
+    // Feedback Dialog State
+    const [feedbackDialogOpen, setFeedbackDialogOpen] = React.useState(false);
+    const [feedbackText, setFeedbackText] = React.useState("");
+    const [isFeedbackSubmitting, setIsFeedbackSubmitting] = React.useState(false);
 
 
     // Load saved interview link on mount
@@ -171,11 +185,70 @@ export const DashboardTeamRecruitment = () => {
         }
     }
 
+    function handleStarRating(stars: number) {
+        if (!selectedApplication) return;
+
+        // Optimistic update
+        setSelectedApplication(prev => prev ? { ...prev, stars } : null);
+        setSelectedApplicationDetails(prev => prev ? { ...prev, stars } : null);
+        setApplications(prev => prev.map(app =>
+            app.id === selectedApplication.id ? { ...app, stars } : app
+        ));
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${selectedApplication.id}/feedback`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stars })
+        })
+            .then(async res => {
+                if (!res.ok)
+                    throw new Error((await res.json()).message);
+            })
+            .catch(err => {
+                toast.error(`Failed to Update Rating: ${err.message}`);
+                // Revert on error considering optimistic update
+                setSelectedApplication(prev => prev ? { ...prev, stars: selectedApplication.stars } : null);
+                setSelectedApplicationDetails(prev => prev ? { ...prev, stars: selectedApplication.stars } : null);
+                setApplications(prev => prev.map(app =>
+                    app.id === selectedApplication.id ? { ...app, stars: selectedApplication.stars } : app
+                ));
+            })
+    }
+
+    function handleFeedbackSubmit() {
+        if (!selectedApplication) return;
+
+        setIsFeedbackSubmitting(true);
+
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${selectedApplication.id}/feedback`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notes: feedbackText })
+        })
+            .then(async res => {
+                const data = await res.json();
+                if (!res.ok)
+                    throw new Error(data.message);
+
+                toast.success(`Updated Feedback for ${selectedApplication.name}`);
+                setFeedbackDialogOpen(false);
+
+                // Update local state with real data from backend (including history)
+                setSelectedApplicationDetails(prev => prev ? { ...prev, notes: data.notes } : null);
+            })
+            .catch(err => {
+                toast.error(`Failed to Add Feedback: ${err.message}`);
+            })
+            .finally(() => {
+                setIsFeedbackSubmitting(false);
+            });
+    }
+
     function executeStageUpdate(applicationId: string, newStage: string, extraData?: any) {
         // Optimistic update locally
         setApplications(apps => apps.map(a => a.id === applicationId ? { ...a, column: newStage, stage: newStage } : a));
 
-        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${applicationId}/stage`, {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${applicationId}/stage`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -183,54 +256,51 @@ export const DashboardTeamRecruitment = () => {
                 ...extraData
             })
         })
-            .then(res => {
-                if (res.ok) {
-                    const stageName = stages.find(s => s.id === newStage)?.name || newStage;
-                    const app = applications.find(a => a.id === applicationId);
-                    toast.success("Stage Updated", { description: `Moved ${app?.name} to ${stageName}` })
-
-                    // Close dialogs and reset
-                    setPendingTransition(null);
-                    setActionDialog(null);
-
-                    // Sync selectedApplication state if it matches
-                    if (selectedApplication?.id === applicationId) {
-                        setSelectedApplication(prev => prev ? {
-                            ...prev,
-                            column: newStage,
-                            stage: newStage,
-                            hiredRole: extraData?.hiredRole ?? prev.hiredRole
-                        } : null);
-                    }
-
-                    setHiredRole("");
-
-
-                    // If interview link save was checked
-                    if (extraData?.interviewLink && saveInteviewLink) {
-                        localStorage.setItem("interviewLink", extraData.interviewLink);
-                    } else if (!saveInteviewLink) {
-                        localStorage.removeItem("interviewLink");
-                    }
-
-                    // If interview guidelines save was checked
-                    if (extraData?.interviewGuidelines && saveInterviewGuidelines) {
-                        localStorage.setItem("interviewGuidelines", extraData.interviewGuidelines);
-                    } else if (!saveInterviewGuidelines) {
-                        localStorage.removeItem("interviewGuidelines");
-                    }
-
-                    // Refresh app list to ensure consistency
-                    fetchApplications();
-                } else {
-                    toast.error("Failed to Update Stage");
-                    // Revert
-                    fetchApplications();
+            .then(async res => {
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(errorData.message || `Failed to update stage: HTTP ${res.status}`);
                 }
+
+                const stageName = stages.find(s => s.id === newStage)?.name || newStage;
+                const app = applications.find(a => a.id === applicationId);
+                toast.success("Stage Updated", { description: `Moved ${app?.name} to ${stageName}` })
+
+                // Close dialogs and reset
+                setPendingTransition(null);
+                setActionDialog(null);
+
+                // Sync selectedApplication state if it matches
+                if (selectedApplication?.id === applicationId) {
+                    setSelectedApplication(prev => prev ? {
+                        ...prev,
+                        column: newStage,
+                        stage: newStage,
+                        hiredRole: extraData?.hiredRole ?? prev.hiredRole
+                    } : null);
+                }
+
+                setHiredRole("");
+
+                // If interview link save was checked
+                if (extraData?.interviewLink && saveInteviewLink) {
+                    localStorage.setItem("interviewLink", extraData.interviewLink);
+                } else if (!saveInteviewLink) {
+                    localStorage.removeItem("interviewLink");
+                }
+
+                // If interview guidelines save was checked
+                if (extraData?.interviewGuidelines && saveInterviewGuidelines) {
+                    localStorage.setItem("interviewGuidelines", extraData.interviewGuidelines);
+                } else if (!saveInterviewGuidelines) {
+                    localStorage.removeItem("interviewGuidelines");
+                }
+
+                // Refresh app list to ensure consistency
+                fetchApplications();
             })
             .catch(err => {
-                console.error(err);
-                toast.error("Failed to Update Stage");
+                toast.error("Failed to Update Stage: " + err.message);
                 fetchApplications();
             })
     }
@@ -240,7 +310,7 @@ export const DashboardTeamRecruitment = () => {
             // Revert local state immediately
             setApplications(apps => apps.map(a =>
                 a.id === pendingTransition.applicationId
-                    ? { ...a, column: pendingTransition.previousStage, stage: pendingTransition.previousStage }
+                    ? { ...a, stage: pendingTransition.previousStage }
                     : a
             ));
         }
@@ -251,7 +321,7 @@ export const DashboardTeamRecruitment = () => {
 
     function handleDragStart(event: DragStartEvent) {
         const item = applications.find(a => a.id === event.active.id);
-        if (item) setDragStartColumn(item.column);
+        if (item) setDragStartColumn(item.stage);
     }
 
     function handleDragEnd(event: DragEndEvent) {
@@ -259,30 +329,16 @@ export const DashboardTeamRecruitment = () => {
         const activeId = active.id;
 
         setDragStartColumn(null);
-
-        if (!over) return;
+        if (!over)
+            return;
 
         const app = applications.find(a => a.id === activeId);
-        // If app exists and column actually changed
-        if (app && app.column !== over.id) { // over.id corresponds to column id if dropped on column
-            // But Wait! dnd-kit can drop on *items* too. 
-            // We need to resolve the target column correctly.
-            // The Kanban library handles the visual 'column' determination.
-            // We can check the 'applications' state because onDataChange has likely already run 
-            // updating the item's column optimistically during the drag!
-
-            // Actually, let's rely on valid transition logic.
-            // 'app.column' here references the state *before* the drop if we use 'applications' from closure?
-            // No, 'applications' is from state. 
-
-            // The KanbanProvider's onDragEnd (which calls this) has typically *finished* the visual move.
-            // But we need to check *where* it landed. The 'over.id' is either a column ID or another card ID.
-
-            // Let's find the column ID:
+        // If app exists and stage actually changed
+        if (app && app.stage !== over.id) { // over.id corresponds to column id if dropped on column
             let targetColumn = over.id as string;
             // If over.id matches an existing card, find that card's column
             const overItem = applications.find(a => a.id === over.id);
-            if (overItem) targetColumn = overItem.column;
+            if (overItem) targetColumn = overItem.stage;
 
             // The dragStartColumn is reliable for previous state.
             if (targetColumn !== dragStartColumn) {
@@ -299,7 +355,8 @@ export const DashboardTeamRecruitment = () => {
             .then(async (response) => {
                 const data = await response.json();
                 if (response.ok) {
-                    setApplications(Array.isArray(data) ? data : []);
+                    // Map stage to column for Kanban compatibility
+                    setApplications(data);
                 }
             })
             .catch(console.error);
@@ -309,42 +366,72 @@ export const DashboardTeamRecruitment = () => {
         if (selectedApplication?.applicantId) {
             setApplicantUrls(null) // Reset while loading
             setOtherApplications([]) // Reset while loading
+            setSelectedApplicationDetails(null);
+            setIsLoadingDetails(true);
 
             // Fetch secure resume URL
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/applicant/${selectedApplication.applicantId}/resume`)
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${selectedApplication.applicantId}/resume`)
                 .then(async (res) => {
-                    if (res.ok) {
-                        const urls = await res.json()
-                        setApplicantUrls(urls)
+                    if (!res.ok) {
+                        const errorData = await res.json();
+                        throw new Error(errorData.message || "Failed to fetch resume");
                     }
+                    const urls = await res.json()
+                    setApplicantUrls(urls)
                 })
-                .catch(err => console.error("Failed to fetch applicant URLs", err))
+                .catch(err => {
+                    console.error("Failed to fetch applicant URLs", err);
+                    toast.error("Failed to load resume: " + err.message);
+                })
 
             // Fetch application history
-            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/applicant/${selectedApplication.applicantId}/applications`)
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${selectedApplication.applicantId}/otherapps`)
                 .then(async (res) => {
-                    if (res.ok) {
-                        const apps = await res.json()
-                        setOtherApplications(apps)
+                    if (!res.ok) {
+                        const errorData = await res.json();
+                        throw new Error(errorData.message || "Failed to fetch application history");
                     }
+                    const apps = await res.json()
+                    setOtherApplications(apps)
                 })
-                .catch(err => console.error("Failed to fetch applicant history", err))
-        }
+                .catch(err => {
+                    console.error("Failed to fetch applicant history", err);
+                    toast.error("Failed to load applicant history: " + err.message);
+                })
 
-        console.log(selectedApplication)
-    }, [selectedApplication])
+            // Fetch Full Details
+            fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/applications/${params.teamId}/${selectedApplication.id}/info`)
+                .then(async (res) => {
+                    if (!res.ok) {
+                        const errorData = await res.json();
+                        throw new Error(errorData.message || "Failed to fetch details");
+                    }
+                    const details: KanbanApplicationDetails = await res.json();
+                    setSelectedApplicationDetails(details);
+                })
+                .catch(err => {
+                    console.error("Failed to fetch application details", err);
+                    toast.error("Failed to load application details: " + err.message);
+                })
+                .finally(() => setIsLoadingDetails(false));
+
+        }
+    }, [selectedApplication?.id])
 
     // Fetch application stages
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/stages`)
             .then(async (response) => {
-                if (response.ok) {
-                    const data = await response.json();
-                    setStages(data);
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || "Failed to fetch stages");
                 }
+                const data = await response.json();
+                setStages(data);
             })
             .catch((e) => {
                 console.error("Failed to fetch stages:", e);
+                toast.error("Failed to load application stages: " + e.message);
             });
     }, []);
 
@@ -370,7 +457,10 @@ export const DashboardTeamRecruitment = () => {
     React.useEffect(() => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`)
             .then(async (response) => {
-                const teamlistResponse: TeamInfoResponse = await response.json()
+                const teamlistResponse: any = await response.json()
+                if (!response.ok)
+                    throw new Error(teamlistResponse.message || "Failed to fetch");
+
                 setTeamInfo(teamlistResponse.team)
                 setSubTeams(teamlistResponse.subteams)
 
@@ -421,16 +511,14 @@ export const DashboardTeamRecruitment = () => {
                 roles: enabledRoles,
                 roleSpecificQuestions: questions
             })
-        }).then((res) => {
-            if (res.ok) {
-                toast.success("Configuration Saved", {
-                    description: "Subteam Recruitment Settings have been Updated!"
-                })
-            } else {
-                toast.error("Configuration Failure", {
-                    description: "Failed to Save Settings: " + res.body
-                })
+        }).then(async (res) => {
+            if (!res.ok) {
+                const errorData = await res.json();
+                throw new Error(errorData.message || `HTTP ${res.status}`);
             }
+            toast.success("Configuration Saved", {
+                description: "Subteam Recruitment Settings have been Updated!"
+            })
         }).catch((e) => {
             toast.error("Server Failure", {
                 description: "Failed to Save Settings: " + e.message
@@ -444,10 +532,10 @@ export const DashboardTeamRecruitment = () => {
     // --- Navigation Logic ---
     const reviewableStages = ['Applied', 'Interview', 'Potential Hire'];
     const reviewableApps = applications
-        .filter(a => reviewableStages.includes(a.column))
+        .filter(a => reviewableStages.includes(a.stage))
         .sort((a, b) => {
-            const idxA = reviewableStages.indexOf(a.column);
-            const idxB = reviewableStages.indexOf(b.column);
+            const idxA = reviewableStages.indexOf(a.stage);
+            const idxB = reviewableStages.indexOf(b.stage);
             return idxA - idxB;
         });
     const currentNavIndex = selectedApplication ? reviewableApps.findIndex(a => a.id === selectedApplication.id) : -1;
@@ -497,45 +585,54 @@ export const DashboardTeamRecruitment = () => {
                         <KanbanProvider
                             columns={stages}
                             data={applications}
+                            columnKey="stage"
                             onDataChange={(data) => setApplications(data)}
                             onDragStart={handleDragStart}
                             onDragEnd={handleDragEnd}
                             className="overflow-x-auto flex h-full"
                         >
-                            {(/* column */ col) => (
-                                <KanbanBoard id={col.id} className="min-w-[250px] ring-inset">
-                                    <KanbanHeader >{col.name} ({applications.filter(a => a.column === col.id).length})</KanbanHeader>
-                                    <KanbanCards id={col.id}>
-                                        {(item) => {
-                                            const appItem = item as unknown as KanbanApplicationCard;
-                                            return (
-                                                <KanbanCard
-                                                    id={item.id}
-                                                    name={item.name}
-                                                    column={item.column}
-                                                    className="bg-background hover:bg-muted/50 transition-colors border-border p-3"
-                                                    onClick={() => setSelectedApplication(appItem)}
-                                                >
-                                                    <div className="flex flex-col w-full">
-                                                        <div className="flex items-baseline justify-between gap-2">
-                                                            <span className="font-semibold text-xs truncate leading-tight">{item.name}</span>
-                                                            <span className="text-[9px] text-muted-foreground whitespace-nowrap tabular-nums shrink-0">
-                                                                {new Date(appItem.appliedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                                            </span>
-                                                        </div>
-
-                                                        {appItem.rolePreferences && appItem.rolePreferences.length > 0 && (
-                                                            <div className="text-[10px] text-muted-foreground/80 truncate mt-0.5 leading-tight">
-                                                                {appItem.rolePreferences.map(p => p.role).join(", ")}
+                            {(/* column */ col) => {
+                                const column = col as StageDefinition;
+                                return (
+                                    <KanbanBoard id={column.id} className="min-w-[250px] ring-inset">
+                                        <KanbanHeader >{column.name} ({applications.filter(a => a.stage === column.id).length})</KanbanHeader>
+                                        <KanbanCards id={column.id}>
+                                            {(item: KanbanApplicationCard) => {
+                                                return (
+                                                    <KanbanCard
+                                                        id={item.id}
+                                                        name={item.name}
+                                                        className="bg-background hover:bg-muted/50 transition-colors border-border p-3"
+                                                        onClick={() => setSelectedApplication(item)}
+                                                    >
+                                                        <div className="flex flex-col w-full">
+                                                            <div className="flex items-baseline justify-between gap-2">
+                                                                <span className="font-semibold text-xs truncate leading-tight">{item.name}</span>
+                                                                <span className="text-[9px] text-muted-foreground whitespace-nowrap tabular-nums shrink-0">
+                                                                    {new Date(item.appliedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                                </span>
                                                             </div>
-                                                        )}
-                                                    </div>
-                                                </KanbanCard>
-                                            );
-                                        }}
-                                    </KanbanCards>
-                                </KanbanBoard>
-                            )}
+
+                                                            <div className="text-[10px] text-muted-foreground/80 truncate mt-0.5 leading-tight">
+                                                                {item.rolePreferences.map(p => p.role).join(", ")}
+                                                            </div>
+
+                                                            <div className="flex items-center gap-0.5 mt-1.5">
+                                                                <Ratings
+                                                                    variant="yellow"
+                                                                    totalStars={5}
+                                                                    value={item.stars ?? 0}
+                                                                    size={12}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </KanbanCard>
+                                                );
+                                            }}
+                                        </KanbanCards>
+                                    </KanbanBoard>
+                                )
+                            }}
                         </KanbanProvider>
                     </TabsContent>
 
@@ -546,7 +643,7 @@ export const DashboardTeamRecruitment = () => {
                     <TabsContent value="settings">
                         <Accordion type="single" collapsible>
                             {
-                                subTeams.map((subteam) => {
+                                subTeams.filter((subteam) => !subteam.attributes.flaggedForDeletion).map((subteam) => {
                                     return (
                                         <AccordionItem value={subteam.pk}>
                                             <AccordionTrigger>{subteam.attributes.friendlyName} Subteam</AccordionTrigger>
@@ -664,137 +761,187 @@ export const DashboardTeamRecruitment = () => {
                                 </div>
                             </div>
                             <p className="text-sm text-muted-foreground">Application Information</p>
+                            <div className="flex flex-col gap-2 mt-2">
+                                <Ratings
+                                    onValueChange={handleStarRating}
+                                    variant="yellow"
+                                    totalStars={5}
+                                    value={selectedApplication?.stars || 0}
+                                    size={18}
+                                />
+                            </div>
                         </div>
 
-                        {/* Application Details */}
-                        <div className="flex flex-col gap-4">
-                            {/* Social Links */}
-                            <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={() => selectedApplication?.email && (window.location.href = `mailto:${selectedApplication.email}`)}
-                                    disabled={!selectedApplication?.email}
-                                >
-                                    Email
-                                    <MailIcon className="ml-1 h-3 w-3" />
-                                </Button>
-
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={() => selectedApplication?.profile?.linkedinUrl && window.open(selectedApplication.profile.linkedinUrl, '_blank')}
-                                    disabled={!selectedApplication?.profile?.linkedinUrl}
-                                >
-                                    LinkedIn
-                                    <ExternalLinkIcon className="ml-1 h-3 w-3" />
-                                </Button>
-
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="flex-1"
-                                    onClick={() => selectedApplication?.profile?.githubUrl && window.open(selectedApplication.profile.githubUrl, '_blank')}
-                                    disabled={!selectedApplication?.profile?.githubUrl}
-                                >
-                                    GitHub
-                                    <ExternalLinkIcon className="ml-1 h-3 w-3" />
-                                </Button>
+                        {isLoadingDetails ? (
+                            <div className="flex items-center justify-center p-8">
+                                <Loader2Icon className="animate-spin h-8 w-8 text-muted-foreground" />
                             </div>
+                        ) : selectedApplicationDetails ? (
+                            /* Application Details */
+                            <div className="flex flex-col gap-4">
+                                {/* Social Links */}
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={() => selectedApplicationDetails?.email && (window.location.href = `mailto:${selectedApplicationDetails.email}`)}
+                                        disabled={!selectedApplicationDetails?.email}
+                                    >
+                                        Email
+                                        <MailIcon className="ml-1 h-3 w-3" />
+                                    </Button>
 
-                            {/* App Dev History */}
-                            {selectedApplication?.appDevInternalPk && (
-                                <Alert className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
-                                    <AlertTriangleIcon />
-                                    <AlertTitle>App Dev History</AlertTitle>
-                                    <AlertDescription>
-                                        <span>
-                                            {selectedApplication?.name.split(" ")[0]} is already in App Dev. To view more about their team history and their internal profile, please <NavLink to={`/org/people/${selectedApplication?.appDevInternalPk}`} className="font-medium hover:underline underline-offset-4">click here</NavLink>.
-                                        </span>
-                                    </AlertDescription>
-                                </Alert>
-                            )}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={() => selectedApplicationDetails?.profile?.linkedinUrl && window.open(selectedApplicationDetails.profile.linkedinUrl, '_blank')}
+                                        disabled={!selectedApplicationDetails?.profile?.linkedinUrl}
+                                    >
+                                        LinkedIn
+                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                    </Button>
 
-                            {/* Subteam Preferences */}
-                            <div>
-                                <h4 className="text-md text-muted-foreground mb-2">Roles in Order of Preference</h4>
-                                <div className="flex flex-col gap-2">
-                                    {selectedApplication?.rolePreferences?.map((pref, idx) => {
-                                        return (
-                                            <div key={idx} className="bg-muted/50 p-2 rounded border border-border">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#{idx + 1}</span>
-                                                    <span className="text-xs font-medium text-foreground">{pref.role}</span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={() => selectedApplicationDetails?.profile?.githubUrl && window.open(selectedApplicationDetails.profile.githubUrl, '_blank')}
+                                        disabled={!selectedApplicationDetails?.profile?.githubUrl}
+                                    >
+                                        GitHub
+                                        <ExternalLinkIcon className="ml-1 h-3 w-3" />
+                                    </Button>
                                 </div>
-                            </div>
 
-                            {/* Instagram Follow */}
-                            <div>
-                                <h4 className="text-md text-muted-foreground mb-2">Basic Information</h4>
-                                {selectedApplication?.profile?.instagramFollow && (
+                                {/* App Dev History */}
+                                {selectedApplicationDetails?.appDevInternalPk && (
+                                    <Alert className="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+                                        <AlertTriangleIcon />
+                                        <AlertTitle>App Dev History</AlertTitle>
+                                        <AlertDescription>
+                                            <span>
+                                                {selectedApplicationDetails?.name.split(" ")[0]} is already in App Dev. To view more about their team history and their internal profile, please <NavLink to={`/org/people/${selectedApplicationDetails?.appDevInternalPk}`} className="font-medium hover:underline underline-offset-4">click here</NavLink>.
+                                            </span>
+                                        </AlertDescription>
+                                    </Alert>
+                                )}
+
+                                {/* Subteam Preferences */}
+                                <div>
+                                    <h4 className="text-md text-muted-foreground mb-2">Roles in Order of Preference</h4>
+                                    <div className="flex flex-col gap-2">
+                                        {selectedApplicationDetails?.rolePreferences?.map((pref, idx) => {
+                                            return (
+                                                <div key={idx} className="bg-muted/50 p-2 rounded border border-border">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">#{idx + 1}</span>
+                                                        <span className="text-xs font-medium text-foreground">{pref.role}</span>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Notes and Feedback */}
+                                <div>
+                                    <h4 className="text-md text-muted-foreground mb-2">Application Notes</h4>
                                     <div className="bg-muted/50 p-3 rounded">
-                                        <p className="text-sm font-medium mb-1">Do you follow App Dev on Instagram?</p>
-                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.instagramFollow}</p>
+                                        <div className="flex items-start">
+                                            <p className="text-sm font-medium mb-1 flex-grow-1">Interview and Intial Feedback</p>
+                                            <Button onClick={() => {
+                                                setFeedbackText(selectedApplicationDetails?.notes || "");
+                                                setFeedbackDialogOpen(true);
+                                            }} variant="ghost" className="h-6 w-6 text-muted-foreground hover:text-foreground">
+                                                <MessageSquarePlusIcon className="scale-x-[-1]" />
+                                            </Button>
+                                        </div>
+                                        <div className="text-sm text-muted-foreground">
+                                            <ReactMarkdown
+                                                remarkPlugins={[remarkGfm]}
+                                                components={{
+                                                    ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                                                    ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                                                    h6: ({ node, ...props }) => <h6 className="font-semibold mt-2" {...props} />,
+                                                    p: ({ node, ...props }) => <p className="mb-2 last:mb-0 leading-relaxed" {...props} />,
+                                                    hr: ({ node, ...props }) => <hr className="my-3 border-border" {...props} />
+                                                }}
+                                            >
+                                                {selectedApplicationDetails?.notes || "No feedback entered"}
+                                            </ReactMarkdown>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Instagram Follow */}
+                                <div>
+                                    <h4 className="text-md text-muted-foreground mb-2">Basic Information</h4>
+                                    {selectedApplicationDetails?.profile?.instagramFollow && (
+                                        <div className="bg-muted/50 p-3 rounded">
+                                            <p className="text-sm font-medium mb-1">Do you follow App Dev on Instagram?</p>
+                                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplicationDetails.profile.instagramFollow}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Why AppDev */}
+                                {selectedApplicationDetails?.profile?.whyAppDev && (
+                                    <div className="bg-muted/50 p-3 rounded">
+                                        <p className="text-sm font-medium mb-1">Why are you interested in joining App Dev?</p>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplicationDetails.profile.whyAppDev}</p>
                                     </div>
                                 )}
-                            </div>
 
-                            {/* Why AppDev */}
-                            {selectedApplication?.profile?.whyAppDev && (
-                                <div className="bg-muted/50 p-3 rounded">
-                                    <p className="text-sm font-medium mb-1">Why are you interested in joining App Dev?</p>
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.whyAppDev}</p>
-                                </div>
-                            )}
-
-                            {/* Additional Info */}
-                            {selectedApplication?.profile?.additionalInfo && (
-                                <div>
-                                    <div className="bg-muted/50 p-3 rounded">
-                                        <p className="text-sm font-medium mb-1">Is there something else you'd like to tell us?</p>
-                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplication.profile.additionalInfo}</p>
+                                {/* Additional Info */}
+                                {selectedApplicationDetails?.profile?.additionalInfo && (
+                                    <div>
+                                        <div className="bg-muted/50 p-3 rounded">
+                                            <p className="text-sm font-medium mb-1">Is there something else you'd like to tell us?</p>
+                                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{selectedApplicationDetails.profile.additionalInfo}</p>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
 
-                            {/* Role Specific Responses */}
-                            {selectedApplication?.responses && Object.keys(selectedApplication.responses).length > 0 && (
+                                {/* Role Specific Responses */}
+                                {selectedApplicationDetails?.responses && Object.keys(selectedApplicationDetails.responses).length > 0 && (
+                                    <div>
+                                        <h4 className="text-md text-muted-foreground mb-4">Role Specific Responses</h4>
+                                        <div className="space-y-3">
+                                            {Object.entries(selectedApplicationDetails.responses).map(([question, answer]) => (
+                                                <div key={question} className="bg-muted/50 p-3 rounded">
+                                                    <p className="text-sm font-medium mb-1">{question}</p>
+                                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{answer as string}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Application Stage History */}
                                 <div>
-                                    <h4 className="text-md text-muted-foreground mb-4">Role Specific Responses</h4>
-                                    <div className="space-y-3">
-                                        {Object.entries(selectedApplication.responses).map(([question, answer]) => (
-                                            <div key={question} className="bg-muted/50 p-3 rounded">
-                                                <p className="text-sm font-medium mb-1">{question}</p>
-                                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{answer as string}</p>
-                                            </div>
+                                    <h4 className="text-md text-muted-foreground mb-4">Stage History</h4>
+                                    <Timeline size="sm">
+                                        {selectedApplicationDetails?.stageHistory?.slice().map((history, index) => (
+                                            <TimelineItem
+                                                key={index}
+                                                date={new Date(history.changedAt).toLocaleString()}
+                                                title={history.stage}
+                                                icon={getTimelineStageIcon(history.stage)}
+                                                iconColor={STAGE_STYLES[history.stage]}
+                                                description={`Changed by ${history.changedBy || 'System'}`}
+                                            />
                                         ))}
-                                    </div>
+                                    </Timeline>
                                 </div>
-                            )}
-
-                            {/* Application Stage History */}
-                            <div>
-                                <h4 className="text-md text-muted-foreground mb-4">Stage History</h4>
-                                <Timeline size="sm">
-                                    {selectedApplication?.stageHistory?.slice().map((history, index) => (
-                                        <TimelineItem
-                                            key={index}
-                                            date={new Date(history.changedAt).toLocaleString()}
-                                            title={history.stage}
-                                            icon={getTimelineStageIcon(history.stage)}
-                                            iconColor={STAGE_STYLES[history.stage]}
-                                            description={`Changed by ${history.changedBy || 'System'}`}
-                                        />
-                                    ))}
-                                </Timeline>
+                            </div> /* End of Details */
+                        ) : (
+                            <div className="p-4 text-center text-muted-foreground">
+                                Failed to load details.
                             </div>
-                        </div>
+                        )}
+
                     </div>
 
                     {/* Right Content: Application Details */}
@@ -806,16 +953,16 @@ export const DashboardTeamRecruitment = () => {
                                 {stages.map((stage) => (
                                     <Button
                                         key={stage.id}
-                                        variant={selectedApplication?.column === stage.id ? "ghost" : "outline"}
+                                        variant={selectedApplication?.stage === stage.id ? "ghost" : "outline"}
                                         size="sm"
                                         className={cn(
                                             "rounded-none first:rounded-l-md last:rounded-r-md transition-all",
-                                            selectedApplication?.column === stage.id ?
+                                            selectedApplication?.stage === stage.id ?
                                                 "bg-primary/10 text-primary border border-primary z-10 disabled:opacity-100 font-medium" :
                                                 "text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-100"
                                         )}
-                                        onClick={() => selectedApplication && initiateStageUpdate(selectedApplication.id, selectedApplication.column, stage.id)}
-                                        disabled={!selectedApplication || selectedApplication.column === stage.id || !validateTransition(selectedApplication.column, stage.id)}
+                                        onClick={() => selectedApplication && initiateStageUpdate(selectedApplication.id, selectedApplication.stage, stage.id)}
+                                        disabled={!selectedApplication || selectedApplication.stage === stage.id || !validateTransition(selectedApplication.stage, stage.id)}
                                     >
                                         {stage.name}
                                     </Button>
@@ -857,8 +1004,8 @@ export const DashboardTeamRecruitment = () => {
                     </div>
                 </DialogContent>
             </Dialog>
-            {/* --- Stage Action Dialogs --- */}
 
+            {/* --- Stage Action Dialogs --- */}
             {/* 1. Reject Dialog */}
             <Dialog open={actionDialog === 'reject'} onOpenChange={(open) => !open && setActionDialog(null)}>
                 <DialogContent>
@@ -966,10 +1113,10 @@ export const DashboardTeamRecruitment = () => {
                             We're excited that {applications.find(a => a.id === pendingTransition?.applicationId)?.name.split(" ")[0]} meets App Dev's talent bar. We'll send them a unique onboarding link to officially join the team.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="py-4">
-                        <Label className="mb-2 block">Please choose the role that you'd like to recruit them for.</Label>
+                    <div>
+                        <Label className="mb-3">Please choose the role that you'd like to recruit them for:</Label>
                         <Select value={hiredRole} onValueChange={setHiredRole}>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select Role" />
                             </SelectTrigger>
                             <SelectContent>
@@ -999,6 +1146,33 @@ export const DashboardTeamRecruitment = () => {
                 </DialogContent>
             </Dialog>
 
-        </div>
+            {/* 5. Feedback Dialog */}
+            <Dialog open={feedbackDialogOpen} onOpenChange={(open) => setFeedbackDialogOpen(open)}>
+                <DialogContent className="min-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>Add Feedback for {selectedApplication?.name.split(" ")[0]}</DialogTitle>
+                        <DialogDescription>
+                            You're feedback means a lot towards helping make informed hiring decisions. Please keep your response concise and informative.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="mt-1">
+                        <Editor
+                            key={selectedApplication?.id}
+                            onChange={(markdown) => {
+                                setFeedbackText(markdown);
+                            }}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setFeedbackDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleFeedbackSubmit} disabled={isFeedbackSubmitting}>
+                            {isFeedbackSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {isFeedbackSubmitting ? "Submitting..." : "Submit Feedback"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+        </div >
     )
 }

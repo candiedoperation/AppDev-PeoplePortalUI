@@ -307,11 +307,11 @@ export const DashboardTeamInfo = () => {
                 onConfirm={executeMemberRemoval}
                 isLoading={isRemovingMember}
             />
-            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} subteams={subTeams} teamPk={teamInfo?.pk} />
+
+            <AddTeamMembersDialog open={addMembersOpen} openChanged={setAddMembersOpen} teamPk={teamInfo?.pk} subteams={subTeams.filter((t) => !t.attributes.flaggedForDeletion)} />
             <ProgressUpdateDialog open={syncDialogOpen} title={syncDialogTitle} description={syncDialogDescription} status={syncDialogStatus} progressPercent={syncDialogProgress} />
             <SubteamsInfoDialog open={subteamsOpen} openChanged={setSubteamsOpen} subteams={subTeams} onRefresh={refreshTeamInfo} parentTeamId={teamInfo?.pk} />
             <TeamSettingsDialog open={teamSettingsOpen} openChanged={setTeamSettingsOpen} teamInfo={teamInfo} settingDefinitions={settingDefinitions} isSaving={isSavingSettings} onSave={saveRootTeamSettings} onTeamInfoChange={handleTeamInfoChange} />
-
 
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">

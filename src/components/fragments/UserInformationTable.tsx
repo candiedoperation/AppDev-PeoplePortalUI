@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { Pagination, PaginationContent, PaginationItem, PaginationPrevious, PaginationLink, PaginationEllipsis, PaginationNext } from "../ui/pagination";
-import { Trash2Icon, User2Icon } from "lucide-react";
+import { MailIcon, Trash2Icon, User2Icon } from "lucide-react";
 
 export interface UserInformationBrief {
     pk: string,
@@ -25,6 +25,7 @@ export interface UserTableProps {
     onRemove?: (user: UserInformationBrief) => void;
     filterPlaceholder?: string;
     className?: string;
+    teamPk?: string;
 }
 
 export const UserInformationTable: React.FC<UserTableProps> = ({
@@ -33,15 +34,52 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
     onUserClick,
     onRemove,
     filterPlaceholder = "Start Typing to Filter by Name",
-    className = ""
+    className = "",
+    teamPk
 }) => {
     const navigate = useNavigate()
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
 
     const columns: ColumnDef<UserInformationBrief>[] = [
-        { accessorKey: 'name', header: "Name", size: 100 },
-        { accessorKey: "username", header: "Alias", size: 120 },
-        { accessorKey: 'email', header: "Contact Information", size: 180 },
+        { accessorKey: 'name', header: "Name", size: 250 },
+        {
+            id: "role",
+            header: "Role",
+            size: 150,
+            cell: ({ row }) => {
+                if (!teamPk || !row.original.attributes?.roles) return <span className="text-muted-foreground text-xs">Not Specified</span>;
+                const role = row.original.attributes.roles[teamPk];
+
+                if (!role) return <span className="text-muted-foreground text-xs">Not Specified</span>;
+
+                return (
+                    <span className="inline-flex items-center rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-secondary-foreground">
+                        {role}
+                    </span>
+                )
+            }
+        },
+        {
+            accessorKey: "username",
+            header: "Alias",
+            size: 120,
+            cell: ({ row }) => (
+                <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs text-muted-foreground">
+                    {row.original.username}
+                </code>
+            )
+        },
+        {
+            accessorKey: 'email',
+            header: "Contact Information",
+            size: 250,
+            cell: ({ row }) => (
+                <div className="flex items-center font-mono text-xs text-muted-foreground truncate" title={row.original.email}>
+                    <MailIcon className="mr-2 h-3.5 w-3.5" />
+                    {row.original.email}
+                </div>
+            )
+        },
         ...(onRemove ? [{
             id: 'actions',
             header: 'Actions',
@@ -127,10 +165,11 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => {
                                     const widthClass =
-                                        header.id === 'name' ? 'w-[100px]' :
-                                            header.id === 'username' ? 'w-[120px]' :
-                                                header.id === 'email' ? 'w-[250px]' :
-                                                    header.id === 'actions' ? 'w-[70px]' : '';
+                                        header.id === 'name' ? 'w-[250px]' :
+                                            header.id === 'role' ? 'w-[150px]' :
+                                                header.id === 'username' ? 'w-[120px]' :
+                                                    header.id === 'email' ? 'w-[250px]' :
+                                                        header.id === 'actions' ? 'w-[70px]' : '';
                                     return (
                                         <TableHead key={header.id} className={widthClass}>
                                             {header.isPlaceholder
@@ -156,10 +195,12 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                                 >
                                     {row.getVisibleCells().map((cell) => {
                                         const widthClass =
-                                            cell.column.id === 'name' ? 'w-[100px]' :
-                                                cell.column.id === 'username' ? 'w-[120px]' :
-                                                    cell.column.id === 'email' ? 'w-[250px]' :
-                                                        cell.column.id === 'actions' ? 'w-[70px]' : '';
+
+                                            cell.column.id === 'name' ? 'w-[250px]' :
+                                                cell.column.id === 'role' ? 'w-[150px]' :
+                                                    cell.column.id === 'username' ? 'w-[120px]' :
+                                                        cell.column.id === 'email' ? 'w-[250px]' :
+                                                            cell.column.id === 'actions' ? 'w-[70px]' : '';
                                         return (<TableCell key={cell.id} className={widthClass}>
                                             {
                                                 flexRender(
@@ -177,11 +218,11 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
                                                                 return (<div className="flex items-center">
                                                                     <Avatar className="h-8 w-8 rounded-lg">
                                                                         <AvatarImage src="https://githuwb.com/shadcn.png" alt="@shadcn" />
-                                                                        <AvatarFallback className="rounded-lg"><User2Icon size="16" /></AvatarFallback>
+                                                                        <AvatarFallback className="rounded-lg bg-orange-100 text-orange-600"><User2Icon size="16" /></AvatarFallback>
                                                                     </Avatar>
                                                                     <div className="flex flex-col ml-2">
                                                                         <span>{firstName}</span>
-                                                                        <span className="text-muted-foreground">{lastName}</span>
+                                                                        <span className="uppercase text-muted-foreground">{lastName}</span>
                                                                     </div>
                                                                 </div>)
                                                             }

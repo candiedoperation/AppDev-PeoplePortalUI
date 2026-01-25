@@ -383,6 +383,7 @@ export const DashboardTeamInfo = () => {
                     <TabsContent value="owner">
                         <UserInformationTable
                             users={teamInfo?.users ?? []}
+                            teamPk={teamInfo?.pk}
                             onRemove={user => handleRemoveMember(user, teamInfo?.pk ?? "", teamInfo?.attributes.friendlyName ?? "")}
                         />
                     </TabsContent>
@@ -392,6 +393,7 @@ export const DashboardTeamInfo = () => {
                             <TabsContent value={subteam.name}>
                                 <UserInformationTable
                                     users={subteam.users ?? []}
+                                    teamPk={subteam.pk}
                                     onRemove={user => handleRemoveMember(user, subteam.pk, subteam.attributes.friendlyName)}
                                 />
                             </TabsContent>
@@ -438,7 +440,10 @@ const AddTeamMembersDialog = (props: { teamPk?: string, subteams: TeamInfo[], op
                 method: "POST",
                 credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ userPk: selectedExistingMember.pk })
+                body: JSON.stringify({
+                    userPk: selectedExistingMember.pk,
+                    roleTitle
+                })
             }).then(async (res) => {
                 if (!res.ok)
                     throw new Error((await res.json()).message)

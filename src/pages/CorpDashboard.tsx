@@ -22,6 +22,7 @@ import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
 import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
 import { DashboardTeamRecruitment } from "@/components/fabric/DashboardTeamRecuitment"
 import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
+import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -171,6 +172,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
+                        <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                     </Routes>
                 </div>
             </SidebarInset>

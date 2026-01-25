@@ -227,11 +227,21 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const [teamSeason, setTeamSeason] = React.useState<string>()
     const [teamType, setTeamType] = React.useState("");
     const [teamYear] = React.useState<number>(new Date().getFullYear())
+
+    /* Role Management */
     const [projectLeadConfirmed, setProjectLeadConfirmed] = React.useState(false)
+    const [teamRole, setTeamRole] = React.useState("")
+
     const [isLoading, setIsLoading] = React.useState(false)
 
     const handleFormSubmit = () => {
         setIsLoading(true)
+
+        /* Resolve Requestor Role */
+        let requestorRole = teamRole;
+        if (teamType === "PROJECT") requestorRole = "Project Lead";
+        if (teamType === "BOOTCAMP") requestorRole = "Bootcamp Director";
+
         fetch(submitURL, {
             method: "POST",
             credentials: "include",
@@ -241,13 +251,20 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                 teamType: teamType,
                 seasonYear: teamYear,
                 seasonType: teamSeason,
-                description: teamDescription
+                description: teamDescription,
+                requestorRole: requestorRole
             })
         }).then(async (res) => {
             if (!res.ok)
                 throw new Error((await res.json()).message);
 
-            toast.success(`New ${teamType.toLowerCase()} team for ${teamName} (${teamSeason} ${teamYear}) successfully created!`)
+            /* Handle Response Status */
+            if (res.status === 201) {
+                toast.success(`New ${teamType.toLowerCase()} team for ${teamName} (${teamSeason} ${teamYear}) successfully created!`)
+            } else if (res.status === 202) {
+                toast.warning(`Team Creation Request Submitted. Please check your email for updates.`)
+            }
+
             props.openChanged(false, true)
         }).catch((err) => {
             toast.error(`Team Creation Failed: ${err.message}`)
@@ -255,6 +272,13 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
         }).finally(() => {
             setIsLoading(false)
         })
+    }
+
+    /* Validation Logic */
+    const isRoleValid = () => {
+        if (teamType === "PROJECT" || teamType === "BOOTCAMP") return projectLeadConfirmed;
+        if (teamType === "CORPORATE") return teamRole.trim().length > 0;
+        return false;
     }
 
     return (
@@ -282,23 +306,32 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                     </div>
                     <div className="grid gap-3">
                         <Label htmlFor="username-1">Team Type</Label>
-                        <Select required value={teamType} onValueChange={(val) => setTeamType(val)}>
+                        <Select required value={teamType} onValueChange={(val) => { setTeamType(val); setProjectLeadConfirmed(false); setTeamRole(""); }}>
                             <SelectTrigger className="w-full">
                                 <SelectValue placeholder="Select Team Type" />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     <SelectLabel>Team Type</SelectLabel>
-                                    <SelectItem value="PROJECT">Project (For Project Teams)</SelectItem>
+                                    <SelectItem value="PROJECT">Project Team</SelectItem>
                                     <SelectItem value="BOOTCAMP">Bootcamp (Web Dev, Quantum, etc.)</SelectItem>
                                     <SelectItem value="CORPORATE">Corporate (All Other Teams, Ex. Sponsorhip)</SelectItem>
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
 
-                        <div className={`flex items-center gap-3 ${(teamType == "PROJECT") ? "" : "hidden"}`}>
+                        {/* Project / Bootcamp Confirmation */}
+                        <div className={`flex items-center gap-3 ${(teamType == "PROJECT" || teamType == "BOOTCAMP") ? "" : "hidden"}`}>
                             <Checkbox checked={projectLeadConfirmed} onCheckedChange={(checked) => setProjectLeadConfirmed(checked != false)} id="projectlead_confirm" />
-                            <Label htmlFor="projectlead_confirm">I confirm that I will be the Project Lead for this team</Label>
+                            <Label htmlFor="projectlead_confirm">
+                                {teamType == "PROJECT" ? "I confirm that I will be the Project Lead for this team" : "I confirm that I will be the Bootcamp Director for this team"}
+                            </Label>
+                        </div>
+
+                        {/* Corporate Role Input */}
+                        <div className={`grid gap-3 ${(teamType == "CORPORATE") ? "" : "hidden"}`}>
+                            <Label htmlFor="role-1">Requestor Role</Label>
+                            <Input placeholder="Ex. Team Lead, Director, etc." required value={teamRole} onChange={(e) => setTeamRole(e.target.value)} />
                         </div>
                     </div>
                     <div className="grid gap-3">
@@ -333,7 +366,7 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                     </DialogClose>
                     <Button
                         onClick={handleFormSubmit}
-                        disabled={isLoading || (teamName.trim().length < 3) || !teamSeason || !teamType || (teamType == "PROJECT" ? !projectLeadConfirmed : false)}
+                        disabled={isLoading || (teamName.trim().length < 3) || !teamSeason || !teamType || !isRoleValid()}
                     >
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Create Team

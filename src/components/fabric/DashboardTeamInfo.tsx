@@ -361,10 +361,14 @@ export const DashboardTeamInfo = () => {
             </div>
 
 
-            <Tabs className="mt-5" defaultValue="owner">
+            <Tabs key={teamInfo?.pk ?? "loading"} className="mt-5" defaultValue={(teamInfo?.attributes.seasonType === "ROLLING") ? (subTeams?.filter(st => !st.attributes.flaggedForDeletion)[0]?.name ?? "owner") : "owner"}>
                 <h3 className="text-lg">Who's on my Team?</h3>
                 <TabsList>
-                    <TabsTrigger value="owner">Team Owners</TabsTrigger>
+                    {
+                        /* We're a Special Team if the Season is Rolling. Janky but fine. */
+                        (teamInfo?.attributes.seasonType === "ROLLING") ?
+                            <></> : <TabsTrigger value="owner">Team Owners</TabsTrigger>
+                    }
                     {
                         subTeams?.filter(st => !st.attributes.flaggedForDeletion).map((subteam) => {
                             let tabName = subteam.attributes.friendlyName;
@@ -930,7 +934,7 @@ const SubteamsInfoDialog = (props: {
                                     </SidebarMenuItem>
                                 ))}
 
-                                <SidebarMenuButton className="cursor-pointer" onClick={() => setSubteamCreateOpen(true)} asChild>
+                                <SidebarMenuButton className="cursor-pointer h-8" onClick={() => setSubteamCreateOpen(true)} asChild>
                                     <a>
                                         <SquarePlusIcon />
                                         <span>Create new Subteam</span>

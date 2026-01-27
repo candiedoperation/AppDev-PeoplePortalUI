@@ -17,7 +17,7 @@
 */
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -121,6 +121,7 @@ const InfoItem = ({ icon: Icon, label, value, href, className }: { icon: React.E
 
 export const DashboardPeopleInfo = () => {
     const { userPk } = useParams<{ userPk: string }>();
+    const navigate = useNavigate();
     const [user, setUser] = useState<UserInformationDetail | null>(null);
     const [userTeamsMap, setUserTeamsMap] = useState<Map<string, TeamInformationBrief>>(new Map());
     const [loading, setLoading] = useState(true);
@@ -289,7 +290,11 @@ export const DashboardPeopleInfo = () => {
                     {roleEntries.length > 0 ? (
                         <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
                             {roleEntries.map(({ teamPk, roleTitle, teamInfo }) => (
-                                <Card key={teamPk} className="hover:border-primary/50 transition-colors">
+                                <Card
+                                    key={teamPk}
+                                    className="hover:border-primary/50 transition-colors cursor-pointer"
+                                    onClick={() => navigate(`/org/teams/${teamPk}`)}
+                                >
                                     <CardContent className="p-3">
                                         <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center justify-between gap-2">

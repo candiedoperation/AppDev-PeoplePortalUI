@@ -177,11 +177,13 @@ export const OrgChartVisualization = () => {
             const BUTTON_AREA_HEIGHT = 44; // Space for the floating button below card
 
             // Compute header text based on this card's data (not parent node)
-            const cardTeamContext = data.attributes?.teamContext?.[0] || null;
+            // For subteam members, teamContext is [rootTeamName, subteamName], so prefer [1] if available
+            const cardTeamContext = data.attributes?.teamContext;
+            const displayTeamName = cardTeamContext?.[1] || cardTeamContext?.[0] || null;
             const cardIsExecutive = data.type === "ROOT_MEMBER";
             const cardHeaderText = cardIsExecutive
                 ? (data.attributes?.role || "Executive")
-                : (cardTeamContext || (data.type === "DIVISION" ? "Division" : data.type === "ROOT" ? "Organization" : "Executive"));
+                : (displayTeamName || (data.type === "DIVISION" ? "Division" : data.type === "ROOT" ? "Organization" : "Executive"));
 
             // Calculate button visibility for this card
             const hasVerticalChildren = depth >= 2 && verticalChildren.has(node.id);
@@ -267,7 +269,7 @@ export const OrgChartVisualization = () => {
                             <Button
                                 variant="outline"
                                 size="icon"
-                                className="h-8 w-8 rounded-full mt-3 bg-background border-muted-foreground/30 hover:bg-muted text-muted-foreground"
+                                className="h-8 w-8 rounded-full mt-3 bg-white dark:bg-zinc-900 border border-muted-foreground/30 hover:bg-muted text-muted-foreground"
                                 onClick={needsLoad ? handleLoadChildren : (e) => {
                                     e.stopPropagation();
                                     if (depth >= 2) {

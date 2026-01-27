@@ -18,6 +18,7 @@
 
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { AppSidebar } from "@/components/app-sidebar"
+import { DashboardPeopleInfo } from "@/components/fabric/DashboardPeopleInfo"
 import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
 import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
 import { DashboardTeamRecruitment } from "@/components/fabric/DashboardTeamRecuitment"
@@ -180,6 +181,7 @@ export const CorpDashboard = () => {
                         <Route path="/" element={<Navigate to="/org/people" />} />
                         <Route path="/org" element={<Navigate to="/org/people" />} />
                         <Route path="/org/people" element={<DashboardPeopleList />} />
+                        <Route path="/org/people/:userPk" element={<DashboardPeopleInfo />} />
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />

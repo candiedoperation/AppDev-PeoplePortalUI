@@ -23,12 +23,13 @@ import { Accordion } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, Code, ScaleIcon, ExternalLinkIcon, AppWindowIcon } from 'lucide-react';
+import { Package, ScaleIcon, ExternalLinkIcon, AppWindowIcon } from 'lucide-react';
 
 // @ts-ignore
 import frontendPackage from '@root/package.json';
 // @ts-ignore
 import frontendLicense from '@root/LICENSE?raw';
+import { getGPLv3License } from '@/lib/utils';
 
 // Interface matching Backend Response
 interface PlatformLicenseResponse {
@@ -57,7 +58,7 @@ export const PlatformLicenseInfo = () => {
         ? Object.entries(frontendPackage.dependencies).map(([name, version]) => ({ name, version }))
         : [];
 
-    const LicenseModal = ({ title, description, content }: { title: string, description: string, content: string }) => (
+    const LicenseModal = ({ title, description, licenseLink, content }: { title: string, description: string, licenseLink: string, content: string }) => (
         <Dialog>
             <DialogTrigger asChild>
                 <Button variant="outline" className="flex items-center gap-2">
@@ -68,7 +69,12 @@ export const PlatformLicenseInfo = () => {
             <DialogContent className="max-w-3xl md:min-w-max min-w-full md:max-h-[80vh] max-h-full flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    <DialogDescription>{description}</DialogDescription>
+                    <DialogDescription>
+                        <a href={licenseLink} className="inline-flex items-center gap-1 hover:underline underline-offset-4" target="_blank" rel="noopener noreferrer">
+                            {description}
+                            <ExternalLinkIcon className="h-3 w-3" />
+                        </a>
+                    </DialogDescription>
                 </DialogHeader>
                 <ScrollArea className="flex-1 p-4 border rounded-md bg-muted/10 h-full overflow-auto">
                     <pre className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
@@ -102,11 +108,13 @@ export const PlatformLicenseInfo = () => {
                         </div>
                         <LicenseModal
                             title="UI License"
+                            licenseLink='https://github.com/candiedoperation/AppDev-PeoplePortalUI/blob/f0d67e6733898362f8f912efd4e1c4238dd2643c/LICENSE'
                             description="GNU General Public License v3.0 (Frontend)"
-                            content={frontendLicense}
+                            content={getGPLv3License()}
                         />
                         <LicenseModal
                             title="Server License"
+                            licenseLink='https://github.com/candiedoperation/AppDev-PeoplePortalServer/blob/da3998da58b625f97945082291642036da6f44fd/LICENSE'
                             description="GNU General Public License v3.0 (Backend)"
                             content={loading ? "Loading..." : data?.licenseText || "Unavailable"}
                         />
@@ -132,7 +140,7 @@ export const PlatformLicenseInfo = () => {
                                     {frontendDeps.map((dep: any, i) => (
                                         <div key={i} className="flex items-center justify-between p-3 px-4 hover:bg-muted/50 text-sm">
                                             <span className="font-medium truncate mr-2">{dep.name}</span>
-                                            <Badge variant="secondary" className="font-mono text-xs shrink-0">{dep.version}</Badge>
+                                            <Badge variant="outline" className="font-mono text-xs shrink-0">{dep.version}</Badge>
                                         </div>
                                     ))}
                                 </div>

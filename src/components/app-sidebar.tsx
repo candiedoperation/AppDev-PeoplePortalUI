@@ -96,7 +96,7 @@ const data = {
                 {
                     icon: LifeBuoyIcon,
                     title: "Support Docs",
-                    url: "https://google.com/wiki/peopleportal",
+                    url: "https://wiki.appdevclub.com/people-portal-user-guide/intro",
                 },
             ],
         },

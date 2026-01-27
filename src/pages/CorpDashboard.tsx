@@ -24,6 +24,7 @@ import { DashboardTeamRecruitment } from "@/components/fabric/DashboardTeamRecui
 import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
+import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -64,6 +65,12 @@ const translateBreadcrumbPath = (path: string) => {
 
         case "recruitment":
             return "Recruitment Tracker"
+
+        case "platform":
+            return "People Portal Platform"
+
+        case "license":
+            return "Licensing"
 
         default:
             return path
@@ -168,7 +175,7 @@ export const CorpDashboard = () => {
                         </BreadcrumbList>
                     </Breadcrumb>
                 </header>
-                <div className="flex flex-1 flex-col gap-4 p-6 pt-0">
+                <div className="flex flex-1 flex-col gap-4 p-6 pt-0 min-h-0 overflow-y-auto">
                     <Routes>
                         <Route path="/" element={<Navigate to="/org/people" />} />
                         <Route path="/org" element={<Navigate to="/org/people" />} />
@@ -178,6 +185,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
+                        <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>
                 </div>
             </SidebarInset>

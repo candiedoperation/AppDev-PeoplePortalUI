@@ -1,11 +1,31 @@
-import React, { useEffect, useState } from 'react';
+/**
+  People Portal UI
+  Copyright (C) 2026  Atheesh Thirumalairajan
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ShieldAlert, Package, Code, ScaleIcon, FileText, ExternalLinkIcon } from 'lucide-react';
+import { Package, Code, ScaleIcon, ExternalLinkIcon } from 'lucide-react';
+
+// @ts-ignore
 import frontendPackage from '@root/package.json';
 // @ts-ignore
 import frontendLicense from '@root/LICENSE?raw';
@@ -45,7 +65,7 @@ export const PlatformLicenseInfo = () => {
                     <ExternalLinkIcon className="h-4 w-4" />
                 </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl min-w-[64vw] max-h-[80vh] flex flex-col">
+            <DialogContent className="max-w-3xl md:min-w-max min-w-full md:max-h-[80vh] max-h-full flex flex-col">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -109,7 +129,7 @@ export const PlatformLicenseInfo = () => {
                         <CardContent className="p-0 flex-1 overflow-hidden" style={{ paddingBottom: 0 }}>
                             <ScrollArea className="h-full w-full">
                                 <div className="flex flex-col divide-y">
-                                    {frontendDeps.map((dep, i) => (
+                                    {frontendDeps.map((dep: any, i) => (
                                         <div key={i} className="flex items-center justify-between p-3 px-4 hover:bg-muted/50 text-sm">
                                             <span className="font-medium truncate mr-2">{dep.name}</span>
                                             <Badge variant="secondary" className="font-mono text-xs shrink-0">{dep.version}</Badge>
@@ -131,14 +151,14 @@ export const PlatformLicenseInfo = () => {
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="p-0 flex-1 overflow-hidden">
+                        <CardContent className="p-0 flex-1 overflow-hidden" style={{ paddingBottom: 0 }}>
                             <ScrollArea className="h-full w-full">
                                 <Accordion type="single" collapsible className="w-full">
                                     {loading ? (
                                         <div className="p-4 text-sm text-muted-foreground">Loading dependencies...</div>
                                     ) : (
                                         <div className="flex flex-col divide-y">
-                                            {data?.dependencies.map((dep, i) => (
+                                            {data?.dependencies?.map((dep, i) => (
                                                 <div key={i} className="flex items-center justify-between p-3 px-4 hover:bg-muted/50 text-sm">
                                                     <span className="font-medium truncate mr-2">{dep.name}</span>
                                                     <Badge variant="outline" className="font-mono text-xs shrink-0">{dep.version}</Badge>

@@ -1,6 +1,6 @@
 /**
-  App Dev Club People Portal UI
-  Copyright (C) 2025  Atheesh Thirumalairajan
+  People Portal UI
+  Copyright (C) 2026  Atheesh Thirumalairajan
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -57,7 +57,7 @@ export function SidebarUserInfo(props: {
     const nameArray = props.userInfo.name.split(" ");
     const initialsArray = [...nameArray.slice(0)]
     if (nameArray.length > 1)
-        initialsArray.push(...nameArray.slice(-1))
+      initialsArray.push(...nameArray.slice(-1))
 
     return "".concat(...initialsArray.map((el) => el.charAt(0).toUpperCase()))
   }

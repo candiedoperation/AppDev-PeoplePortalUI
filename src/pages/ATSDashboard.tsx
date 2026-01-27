@@ -1282,7 +1282,7 @@ const ATSApplyList = ({ applications }: { applications: ATSApplication[] }) => {
 
     return (
         <div className="flex flex-col max-w-5xl mx-auto w-full pb-12 px-4 space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 mt-8">
                 <h1 className='text-4xl font-extrabold tracking-tight'>Open Roles</h1>
                 <p className="text-muted-foreground">Join one of our world-class teams and build something amazing.</p>
             </div>

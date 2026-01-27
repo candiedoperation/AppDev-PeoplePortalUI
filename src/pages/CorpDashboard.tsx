@@ -22,6 +22,7 @@ import { DashboardPeopleList } from "@/components/fabric/DashboardPeopleList"
 import { DashboardTeamInfo } from "@/components/fabric/DashboardTeamInfo"
 import { DashboardTeamRecruitment } from "@/components/fabric/DashboardTeamRecuitment"
 import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
+import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import {
     Breadcrumb,
@@ -45,6 +46,9 @@ const translateBreadcrumbPath = (path: string) => {
     switch (path) {
         case "org":
             return "Organization"
+
+        case "orgchart":
+            return "Chart"
 
         case "teams":
             return "Teams"
@@ -173,6 +177,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
+                        <Route path="/org/orgchart" element={<OrgChartVisualization />} />
                     </Routes>
                 </div>
             </SidebarInset>

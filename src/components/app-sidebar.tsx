@@ -12,6 +12,7 @@ import {
     Terminal,
     TicketIcon,
     Users,
+    UsersRoundIcon,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -42,9 +43,14 @@ const data = {
                     url: "/org/people",
                 },
                 {
-                    icon: NetworkIcon,
+                    icon: UsersRoundIcon,
                     title: "Teams",
                     url: "/org/teams",
+                },
+                {
+                    icon: NetworkIcon,
+                    title: "Org Chart",
+                    url: "/org/orgchart",
                 },
             ],
         },

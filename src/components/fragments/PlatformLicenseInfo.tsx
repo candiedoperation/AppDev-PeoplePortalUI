@@ -23,7 +23,7 @@ import { Accordion } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Package, Code, ScaleIcon, ExternalLinkIcon } from 'lucide-react';
+import { Package, Code, ScaleIcon, ExternalLinkIcon, AppWindowIcon } from 'lucide-react';
 
 // @ts-ignore
 import frontendPackage from '@root/package.json';
@@ -93,10 +93,10 @@ export const PlatformLicenseInfo = () => {
                 {/* Main License Card */}
                 <Card className="flex gap-1 flex-col shrink-0">
                     <CardContent className="p-6 flex items-center gap-4">
-                        <div className="flex flex-grow-1 items-center gap-2">
+                        <div className="flex flex-grow-1 items-center gap-4">
                             <ScaleIcon className="h-5 w-5 text-orange-400" />
                             <div>
-                                <CardTitle className="text-lg">People Portal License</CardTitle>
+                                <CardTitle className="text-lg">People Portal</CardTitle>
                                 <CardDescription>Copyright © {new Date().getFullYear()} Atheesh Thirumalairajan</CardDescription>
                             </div>
                         </div>
@@ -118,8 +118,8 @@ export const PlatformLicenseInfo = () => {
                     {/* Frontend Dependencies */}
                     <Card className="flex flex-col overflow-hidden gap-0">
                         <CardHeader className="pb-3 border-b bg-muted/20">
-                            <div className="flex items-center gap-2">
-                                <Code className="h-5 w-5 text-purple-600" />
+                            <div className="flex items-center gap-4">
+                                <AppWindowIcon className="h-5 w-5 text-blue-500" />
                                 <div>
                                     <CardTitle className="text-base">Frontend Dependencies</CardTitle>
                                     <CardDescription>Client-side packages (React/Vite)</CardDescription>
@@ -143,7 +143,7 @@ export const PlatformLicenseInfo = () => {
                     {/* Backend Dependencies */}
                     <Card className="flex flex-col overflow-hidden gap-0">
                         <CardHeader className="pb-3 border-b bg-muted/20">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-4">
                                 <Package className="h-5 w-5 text-emerald-600" />
                                 <div>
                                     <CardTitle className="text-base">Backend Dependencies</CardTitle>

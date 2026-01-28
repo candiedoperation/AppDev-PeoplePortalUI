@@ -73,6 +73,7 @@ interface ProprietaryInformationStageProps {
 }
 
 interface PersonalInfoData {
+    avatarKey?: string,
     profileUrl: string,
     major: UMDApiMajorListResponse,
     expectedGrad: string,
@@ -80,6 +81,7 @@ interface PersonalInfoData {
 }
 
 interface PersonalInfoStageProps {
+    onboardId?: string,
     defaultData: PersonalInfoData | undefined,
     stepComplete: (data: PersonalInfoData) => void
 }
@@ -168,7 +170,8 @@ export const UserOnboarding = () => {
                 password: createdPasswordRef.current,
                 major: personalInfoRef.current?.major.name,
                 expectedGrad: personalInfoRef.current?.expectedGrad,
-                phoneNumber: personalInfoRef.current?.phoneNumber
+                phoneNumber: personalInfoRef.current?.phoneNumber,
+                avatarKey: personalInfoRef.current?.avatarKey
             })
         }).then((res) => {
             toast.success("Onboarding Complete!", {
@@ -278,7 +281,7 @@ export const UserOnboarding = () => {
                             <Route path="/loginsetup" element={<CreatePasswordStage defaultPassword={createdPasswordRef.current} {...passwordStageProps} />} />
                             <Route path='/legal' element={<ProprietaryInformationStage defaultSigned={ipAgreementComplete.current} stepComplete={handleIPAgreementComplete} />} />
                             <Route path='/slack' element={<SlackJoinStage defaultVerified={slackJoinComplete.current} {...slackJoinProps} />} />
-                            <Route path='/identity' element={<PersonalInfoStage defaultData={personalInfoRef.current} {...personalInfoProps} />} />
+                            <Route path='/identity' element={<PersonalInfoStage onboardId={params.onboardId} defaultData={personalInfoRef.current} {...personalInfoProps} />} />
                             <Route path='/complete' element={
                                 <CompleteSetupStage
                                     isLoading={isLoading}
@@ -355,9 +358,11 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
 
 const PersonalInfoStage = (props: PersonalInfoStageProps) => {
     const [preview, setPreview] = React.useState<string | null>(props.defaultData?.profileUrl ?? null);
+    const [avatarKey, setAvatarKey] = React.useState<string | undefined>(props.defaultData?.avatarKey);
     const fileUploadRef = React.useRef<HTMLInputElement>(null)
     const [phoneNumber, setPhoneNumber] = React.useState(props.defaultData?.phoneNumber ?? "")
     const [selectedMajor, setSelectedMajor] = React.useState<UMDApiMajorListResponse | undefined>(props.defaultData?.major)
+    const [isUploading, setIsUploading] = React.useState(false);
 
     const [majorListOpen, setMajorListOpen] = React.useState(false)
     const [majors, setMajors] = React.useState<UMDApiMajorListResponse[]>([])
@@ -374,13 +379,182 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
             })
     }, [])
 
-    function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const resizeImage = (file: File): Promise<File> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target?.result as string;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+                    const MAX_WIDTH = 500;
+                    const MAX_HEIGHT = 500;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height *= MAX_WIDTH / width;
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width *= MAX_HEIGHT / height;
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx?.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob((blob) => {
+                        if (!blob) {
+                            reject(new Error("Canvas to Blob failed"));
+                            return;
+                        }
+                        const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", {
+                            type: "image/webp",
+                            lastModified: Date.now(),
+                        });
+                        resolve(newFile);
+                    }, 'image/webp', 0.8);
+                };
+                img.onerror = (error) => reject(error);
+            };
+            reader.onerror = (error) => reject(error);
+        });
+    };
+
+    const validateFileSignature = (file: File): Promise<boolean> => {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = (e) => {
+                if (!e.target?.result || typeof e.target.result === 'string') {
+                    resolve(false);
+                    return;
+                }
+
+                const arr = (new Uint8Array(e.target.result)).subarray(0, 4);
+                let header = "";
+                for (let i = 0; i < arr.length; i++) {
+                    header += arr[i].toString(16);
+                }
+
+                // Magic Numbers
+                // PNG: 89 50 4E 47
+                // JPEG: FF D8 FF
+                // GIF: 47 49 46 38
+                // WebP: 52 49 46 46 (RIFF) ... WEBP (handled loosely here by RIFF check but good enough for rough check)
+
+                // Check hex signature
+                let isValid = false;
+                switch (true) {
+                    case header.startsWith("89504e47"): // PNG
+                    case header.startsWith("ffd8ff"):   // JPEG
+                    case header.startsWith("47494638"): // GIF
+                    case header.startsWith("52494646"): // RIFF (WebP mostly)
+                        isValid = true;
+                        break;
+                    default:
+                        isValid = false;
+                        break;
+                }
+                resolve(isValid);
+            };
+            reader.readAsArrayBuffer(file.slice(0, 4)); // Read first 4 bytes
+        });
+    };
+
+    async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (file) {
-            const url = URL.createObjectURL(file);
-            setPreview(url);
-            console.log(url)
-            // TODO: upload to server with fetch/FormData
+            const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+            if (!allowedTypes.includes(file.type)) {
+                toast.error("Invalid file type", { description: "Please upload an image (JPEG, PNG, WEBP, GIF)" });
+                return;
+            }
+
+            // Security: Magic Number Validation
+            const isValidSignature = await validateFileSignature(file);
+            if (!isValidSignature) {
+                toast.error("Invalid file content", { description: "The file content does not match its extension." });
+                return;
+            }
+
+            // Client-side resizing
+            let uploadFile = file;
+            setIsUploading(true); // Start loader during processing
+
+            try {
+                // If it's not a GIF (which we don't want to resize to avoid losing animation), resize it
+                // We'll also skip resizing if it's already very small
+                if (file.type !== 'image/gif' && file.size > 200 * 1024) {
+                    toast.info("Optimizing image...", { duration: 2000 });
+                    try {
+                        uploadFile = await resizeImage(file);
+                    } catch (err) {
+                        console.error("Resize failed", err);
+                        // Fallback to original file if resize fails
+                    }
+                }
+
+                if (uploadFile.size > 5 * 1024 * 1024) {
+                    toast.error("File is too large!", { description: "Maximum file size is 5MB" });
+                    setIsUploading(false);
+                    return;
+                }
+
+                const url = URL.createObjectURL(uploadFile);
+                setPreview(url);
+
+                if (!props.onboardId) {
+                    toast.error("Missing Onboard ID");
+                    setIsUploading(false);
+                    return;
+                }
+
+                // Get Upload URL
+                const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/avatar/upload-url?inviteId=${props.onboardId}&fileName=${encodeURIComponent(uploadFile.name)}&contentType=${encodeURIComponent(uploadFile.type)}`);
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.message || "Failed to get upload URL");
+                }
+                const { uploadUrl, key, fields } = await res.json();
+
+                // Upload to S3 using Presigned POST
+                const formData = new FormData();
+                Object.entries(fields).forEach(([k, v]) => {
+                    formData.append(k, v as string);
+                });
+                formData.append("file", uploadFile);
+
+                const uploadRes = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                if (!uploadRes.ok) {
+                    const errorText = await uploadRes.text();
+                    if (uploadRes.status === 403 && errorText.includes("EntityTooLarge")) {
+                        throw new Error("File is too large (S3 Limit Exceeded)");
+                    }
+                    throw new Error(`Failed to upload to S3: ${uploadRes.status} ${uploadRes.statusText}`);
+                }
+
+                await new Promise(r => setTimeout(r, 1000)); // Wait a bit for S3 consistency
+
+                setAvatarKey(key);
+                toast.success("Profile picture uploaded!");
+            } catch (e: any) {
+                console.error(e);
+                toast.error("Upload failed", { description: e.message || "Please try again later" });
+                setAvatarKey(undefined); // Clear key on error
+            } finally {
+                setIsUploading(false);
+            }
         }
     }
 
@@ -471,14 +645,18 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
 
             <Button
                 className='mt-8'
-                disabled={!expectedGraduation || !selectedMajor || !phoneNumber || !preview}
+                disabled={!expectedGraduation || !selectedMajor || !phoneNumber || !preview || isUploading}
                 onClick={() => props.stepComplete({
                     profileUrl: preview!,
+                    avatarKey: avatarKey,
                     major: selectedMajor!,
                     expectedGrad: expectedGraduation,
                     phoneNumber: phoneNumber
                 })}
-            >Continue</Button>
+            >
+                <Loader2Icon style={{ display: (isUploading) ? 'block' : 'none' }} className='animate-spin mr-2' />
+                Continue
+            </Button>
         </div>
     )
 }

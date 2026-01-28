@@ -97,7 +97,7 @@ export const DashboardPeopleList = () => {
                 return (
                     <div className="flex items-center">
                         <Avatar className="h-9 w-9 rounded-lg">
-                            <AvatarImage src={row.original.avatar} alt={row.original.name} />
+                            <AvatarImage src={row.original.avatar} alt={row.original.name} className="object-cover" />
                             <AvatarFallback className="rounded-lg bg-orange-100 text-orange-600">
                                 {initials}
                             </AvatarFallback>

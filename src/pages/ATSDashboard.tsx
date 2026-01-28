@@ -25,7 +25,6 @@ import React from 'react'
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import {
-    AwardIcon,
     CheckCircle2,
     ChevronLeftIcon,
     CircleXIcon,
@@ -62,7 +61,6 @@ import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogHea
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp'
 import { toast } from 'sonner'
 import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
     DropdownMenu,
@@ -885,24 +883,47 @@ const ATSApplyPage = ({
             return toast.error("Please upload a PDF file.")
         }
 
+        if (file.size > 10 * 1024 * 1024) {
+            return toast.error("Resume file is too large. Maximum size is 10MB.")
+        }
+
+        // Verify magic numbers (%PDF-)
+        const isActualPDF = await new Promise<boolean>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = (e) => {
+                const arr = new Uint8Array(e.target?.result as ArrayBuffer).subarray(0, 5);
+                const header = String.fromCharCode(...arr);
+                resolve(header === "%PDF-");
+            };
+            reader.onerror = () => resolve(false);
+            reader.readAsArrayBuffer(file.slice(0, 5));
+        });
+
+        if (!isActualPDF) {
+            return toast.error("The uploaded file does not appear to be a valid PDF. Please check the file and try again.");
+        }
+
         setIsUploading(true)
         try {
-            // 1. Get presigned URL
+            // 1. Get presigned POST data
             const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/ats/resume/upload-url?fileName=${encodeURIComponent(file.name)}&contentType=${encodeURIComponent(file.type)}`, {
                 credentials: 'include'
             })
 
             if (!res.ok) throw new Error("Failed to get upload URL")
 
-            const { uploadUrl, key } = await res.json()
+            const { uploadUrl, fields, key } = await res.json()
 
-            // 2. Upload to S3
+            // 2. Upload to S3 using FormData for Presigned POST
+            const formData = new FormData();
+            Object.entries(fields).forEach(([k, v]) => {
+                formData.append(k, v as string);
+            });
+            formData.append("file", file);
+
             const uploadRes = await fetch(uploadUrl, {
-                method: "PUT",
-                headers: {
-                    'Content-Type': file.type
-                },
-                body: file
+                method: "POST",
+                body: formData
             })
 
             if (!uploadRes.ok) throw new Error("Failed to upload to S3")

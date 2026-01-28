@@ -236,7 +236,7 @@ export const UserInformationTable: React.FC<UserTableProps> = ({
 
                                                                 return (<div className="flex items-center">
                                                                     <Avatar className="h-8 w-8 rounded-lg">
-                                                                        <AvatarImage src={row.original.avatar} alt={row.original.name} />
+                                                                        <AvatarImage src={row.original.avatar} alt={row.original.name} className="object-cover" />
                                                                         <AvatarFallback className="rounded-lg bg-orange-100 text-orange-600"><User2Icon size="16" /></AvatarFallback>
                                                                     </Avatar>
                                                                     <div className="flex flex-col ml-2">

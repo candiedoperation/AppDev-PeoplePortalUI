@@ -348,7 +348,7 @@ const CompleteSetupStage = (props: CompleteSetupStageProps) => {
                     disabled={!allStepsComplete || props.isLoading}
                     onClick={props.stepComplete}
                 >
-                    <Loader2Icon style={{ display: (props.isLoading) ? 'block' : 'none' }} className='animate-spin' />
+                    <Loader2Icon className={cn('animate-spin', !props.isLoading && 'hidden')} />
                     Finish Setup
                 </Button>
             </div>
@@ -367,6 +367,14 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
     const [majorListOpen, setMajorListOpen] = React.useState(false)
     const [majors, setMajors] = React.useState<UMDApiMajorListResponse[]>([])
     const [expectedGraduation, setExpectedGraduation] = React.useState(props.defaultData?.expectedGrad ?? "")
+
+    React.useEffect(() => {
+        return () => {
+            if (preview) {
+                URL.revokeObjectURL(preview);
+            }
+        }
+    }, [preview]);
 
     React.useEffect(() => {
         fetch("https://api.umd.io/v1/majors/list")
@@ -484,6 +492,12 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
                 return;
             }
 
+            // Upfront File Size Check (Security: Prevent browser crash/hang during resize)
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("File is too large!", { description: "Maximum file size is 5MB" });
+                return;
+            }
+
             // Client-side resizing
             let uploadFile = file;
             setIsUploading(true); // Start loader during processing
@@ -501,13 +515,8 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
                     }
                 }
 
-                if (uploadFile.size > 5 * 1024 * 1024) {
-                    toast.error("File is too large!", { description: "Maximum file size is 5MB" });
-                    setIsUploading(false);
-                    return;
-                }
-
                 const url = URL.createObjectURL(uploadFile);
+                if (preview) URL.revokeObjectURL(preview);
                 setPreview(url);
 
                 if (!props.onboardId) {
@@ -654,7 +663,7 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
                     phoneNumber: phoneNumber
                 })}
             >
-                <Loader2Icon style={{ display: (isUploading) ? 'block' : 'none' }} className='animate-spin mr-2' />
+                <Loader2Icon className={cn('animate-spin mr-2', !isUploading && 'hidden')} />
                 Continue
             </Button>
         </div>
@@ -715,7 +724,7 @@ const SlackJoinStage = (props: SlackJoinStageProps) => {
                 </Alert>
 
                 <Button onClick={verifyJoinStatus} disabled={isLoading}>
-                    <Loader2Icon style={{ display: (isLoading) ? 'block' : 'none' }} className='animate-spin' />
+                    <Loader2Icon className={cn('animate-spin mr-2', !isLoading && 'hidden')} />
                     Verify and Continue
                 </Button>
             </div>

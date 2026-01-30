@@ -241,7 +241,9 @@ export const DashboardPeopleInfo = () => {
                         {attributes?.phoneNumber && (
                             <div className="flex items-center gap-2">
                                 <Phone className="h-4 w-4 shrink-0" />
-                                <span className="font-mono text-xs">{attributes.phoneNumber}</span>
+                                <a href={`tel:${attributes.phoneNumber}`} className="hover:text-primary hover:underline truncate transition-colors" title={attributes.phoneNumber}>
+                                    {attributes.phoneNumber}
+                                </a>
                             </div>
                         )}
                     </div>

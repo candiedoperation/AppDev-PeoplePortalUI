@@ -244,7 +244,7 @@ export const DashboardPeopleList = () => {
                 </Pagination>
             </div>
 
-            <div className={`flex-1 min-h-0 overflow-auto rounded-md border ${isLoading ? "opacity-50" : ""}`}>
+            <div className={`flex-1 min-h-[400px] overflow-auto rounded-md border ${isLoading ? "opacity-50" : ""}`}>
                 <Table>
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (

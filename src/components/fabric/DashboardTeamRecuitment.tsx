@@ -583,7 +583,7 @@ export const DashboardTeamRecruitment = () => {
     }
 
     return (
-        <div className="flex flex-col m-2 h-full">
+        <div className="flex flex-col p-2 h-full overflow-hidden">
             <div className="flex items-center">
                 <div className="flex flex-col flex-grow-1">
                     <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">Recruitment Tracker</h1>
@@ -591,15 +591,15 @@ export const DashboardTeamRecruitment = () => {
                 </div>
             </div>
 
-            <Tabs className="mt-5 flex flex-col flex-grow" defaultValue="applications">
+            <Tabs className="mt-5 flex flex-col flex-1 min-h-0" defaultValue="applications">
                 <TabsList>
                     <TabsTrigger value="applications">Applications</TabsTrigger>
                     <TabsTrigger value="statistics">Statistics</TabsTrigger>
                     <TabsTrigger value="settings">Recruitment Settings</TabsTrigger>
                 </TabsList>
 
-                <div className="mt-2 flex-grow flex flex-col min-h-0">
-                    <TabsContent className="flex flex-col flex-grow h-full" value="applications">
+                <div className="mt-2 flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <TabsContent className="flex flex-col flex-1 min-h-0 h-full" value="applications">
                         <KanbanProvider
                             columns={stages}
                             data={applications}
@@ -607,7 +607,6 @@ export const DashboardTeamRecruitment = () => {
                             onDataChange={(data) => setApplications(data)}
                             onDragStart={handleDragStart}
                             onDragEnd={handleDragEnd}
-                            className="overflow-x-auto flex h-full"
                         >
                             {(/* column */ col) => {
                                 const column = col as StageDefinition;
@@ -620,10 +619,10 @@ export const DashboardTeamRecruitment = () => {
                                                     <KanbanCard
                                                         id={item.id}
                                                         name={item.name}
-                                                        className="bg-background hover:bg-muted/50 transition-colors border-border p-3"
+                                                        className="bg-background hover:bg-muted/50 transition-colors border-border p-3 w-60 shrink-0"
                                                         onClick={() => setSelectedApplication(item)}
                                                     >
-                                                        <div className="flex flex-col w-full">
+                                                        <div className="flex flex-col w-full overflow-hidden">
                                                             <div className="flex items-baseline justify-between gap-2">
                                                                 <span className="font-semibold text-xs truncate leading-tight">{item.name}</span>
                                                                 <span className="text-[9px] text-muted-foreground whitespace-nowrap tabular-nums shrink-0">
@@ -631,7 +630,7 @@ export const DashboardTeamRecruitment = () => {
                                                                 </span>
                                                             </div>
 
-                                                            <div className="text-[10px] text-muted-foreground/80 truncate mt-0.5 leading-tight">
+                                                            <div className="text-[10px] text-muted-foreground/80 truncate mt-0.5 leading-tight w-full" title={item.rolePreferences.map(p => p.role).join(", ")}>
                                                                 {item.rolePreferences.map(p => p.role).join(", ")}
                                                             </div>
 
@@ -654,11 +653,11 @@ export const DashboardTeamRecruitment = () => {
                         </KanbanProvider>
                     </TabsContent>
 
-                    <TabsContent className="overflow-y-auto h-full" value="statistics">
+                    <TabsContent className="flex-1 min-h-0 overflow-y-auto h-full pr-4 pl-2" value="statistics">
                         <RecruitmentStatistics applications={applications} subTeams={subTeams} />
                     </TabsContent>
 
-                    <TabsContent value="settings">
+                    <TabsContent className="flex-1 min-h-0 overflow-y-auto h-full pr-4 pl-2" value="settings">
                         <Accordion type="single" collapsible>
                             {
                                 subTeams.filter((subteam) => !subteam.attributes.flaggedForDeletion).map((subteam) => {
@@ -803,10 +802,19 @@ export const DashboardTeamRecruitment = () => {
                                         variant="outline"
                                         size="sm"
                                         className="flex-1"
-                                        onClick={() => selectedApplicationDetails?.email && (window.location.href = `mailto:${selectedApplicationDetails.email}`)}
+                                        onClick={async () => {
+                                            if (selectedApplicationDetails?.email) {
+                                                try {
+                                                    await navigator.clipboard.writeText(selectedApplicationDetails.email);
+                                                    toast.success("Email Copied to Clipboard!");
+                                                } catch (err) {
+                                                    toast.error("Failed to copy email to clipboard");
+                                                }
+                                            }
+                                        }}
                                         disabled={!selectedApplicationDetails?.email}
                                     >
-                                        Email
+                                        Copy Email
                                         <MailIcon className="ml-1 h-3 w-3" />
                                     </Button>
 
@@ -992,9 +1000,9 @@ export const DashboardTeamRecruitment = () => {
                             <p className="text-lg text-muted-foreground leading-0">Other Applications</p>
                             <div className="flex gap-2 max-w-full overflow-x-auto">
                                 {otherApplications.map((app) => (
-                                    <div key={app.id} className={`flex gap-6 p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
-                                        <div className="flex flex-col leading-[1]">
-                                            <p className="font-medium truncate">{app.teamName || 'Unknown Team'}</p>
+                                    <div key={app.id} className={`flex justify-between items-center gap-4 p-3 rounded-md border text-sm w-60 shrink-0 ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
+                                        <div className="flex flex-col leading-[1] min-w-0">
+                                            <p className="font-medium truncate" title={app.teamName || 'Unknown Team'}>{app.teamName || 'Unknown Team'}</p>
                                             <p className="text-[10px] text-muted-foreground mt-1">Applied {new Date(app.appliedAt).toLocaleDateString()}</p>
                                         </div>
 

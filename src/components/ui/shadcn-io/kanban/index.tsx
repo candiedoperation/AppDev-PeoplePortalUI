@@ -30,7 +30,6 @@ import {
 import { createPortal } from 'react-dom';
 import tunnel from 'tunnel-rat';
 import { Card } from '@/components/ui/card';
-import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 
 const t = tunnel();
@@ -78,7 +77,7 @@ export const KanbanBoard = ({ id, children, className }: KanbanBoardProps) => {
   return (
     <div
       className={cn(
-        'flex size-full min-h-40 flex-col divide-y overflow-hidden rounded-md border bg-secondary text-xs shadow-sm ring-2 transition-all',
+        'flex h-full flex-col divide-y overflow-hidden rounded-md border bg-secondary text-xs shadow-sm ring-2 transition-all',
         isOver ? 'ring-primary' : 'ring-transparent',
         className
       )}
@@ -125,13 +124,13 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
         <Card
           {...props}
           className={cn(
-            'gap-4 rounded-md shadow-sm relative cursor-grab active:cursor-grabbing',
+            'gap-4 rounded-md shadow-sm relative cursor-grab active:cursor-grabbing overflow-hidden',
             isDragging && 'opacity-30',
             className
           )}
         >
           {/* Content with higher z-index for interactivity */}
-          <div className="relative z-10" style={{ padding: '0px' }}>
+          <div className="relative z-10 overflow-hidden" style={{ padding: '0px' }}>
             {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
           </div>
         </Card>
@@ -172,24 +171,23 @@ export const KanbanCards = <T extends KanbanItemProps = KanbanItemProps>({
   const items = filteredData.map((item) => item.id);
 
   return (
-    <ScrollArea className="overflow-hidden">
+    <div className="flex-1 min-h-0 overflow-y-auto">
       <SortableContext items={items}>
         <div
-          className={cn('flex flex-grow flex-col gap-2 p-2', className)}
+          className={cn('flex flex-col gap-2 p-2', className)}
           {...(props as any)}
         >
           {filteredData.map(children)}
         </div>
       </SortableContext>
-      <ScrollBar orientation="vertical" />
-    </ScrollArea>
+    </div>
   );
 };
 
 export type KanbanHeaderProps = HTMLAttributes<HTMLDivElement>;
 
 export const KanbanHeader = ({ className, ...props }: KanbanHeaderProps) => (
-  <div className={cn('m-0 p-2 font-semibold text-sm', className)} {...(props as any)} />
+  <div className={cn('m-0 p-2 font-semibold text-sm shrink-0 sticky top-0 z-10 bg-secondary', className)} {...(props as any)} />
 );
 
 export type KanbanProviderProps<
@@ -345,11 +343,11 @@ export const KanbanProvider = <
       >
         <div
           className={cn(
-            'grid size-full auto-cols-fr grid-flow-col gap-4',
+            'flex h-full gap-4 overflow-x-auto',
             className
           )}
         >
-          {columns.map((column) => <div key={column.id}>{children(column)}</div>)}
+          {columns.map((column) => <div key={column.id} className="min-h-0 overflow-hidden shrink-0">{children(column)}</div>)}
         </div>
         {typeof window !== 'undefined' &&
           createPortal(

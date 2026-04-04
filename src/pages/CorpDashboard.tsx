@@ -26,6 +26,7 @@ import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
+import { TeamMeetings } from "./TeamMeetings"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -66,6 +67,9 @@ const translateBreadcrumbPath = (path: string) => {
 
         case "recruitment":
             return "Recruitment Tracker"
+
+        case "meetings":
+            return "Meetings"
 
         case "platform":
             return "People Portal Platform"
@@ -185,6 +189,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
+                        <Route path="/org/teams/:teamId/meetings" element={<TeamMeetings />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />

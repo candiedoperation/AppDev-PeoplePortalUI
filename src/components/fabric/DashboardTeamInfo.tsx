@@ -16,7 +16,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { BanIcon, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { BanIcon, Calendar, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -378,6 +378,11 @@ export const DashboardTeamInfo = () => {
                     <Button onClick={() => setTeamSettingsOpen(true)} variant="outline" className="cursor-pointer">
                         <SettingsIcon />
                         Team Settings
+                    </Button>
+
+                    <Button onClick={() => navigate("./meetings")} variant="outline" className="cursor-pointer">
+                        <Calendar />
+                        Team Meetings
                     </Button>
                 </div>
             </div>

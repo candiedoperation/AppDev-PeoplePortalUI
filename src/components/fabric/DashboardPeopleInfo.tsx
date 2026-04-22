@@ -244,9 +244,6 @@ export const DashboardPeopleInfo = () => {
                     <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
                         <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 shrink-0" />
-                            {/* <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
-                                {user.email}
-                            </a> */}
                             <button onClick={() => {copyToClipboard(user.email)}} className="hover:text-primary hover:underline cursor-pointer truncate transition-colors" title={user.email}>
                                 {user.email}
                             </button>

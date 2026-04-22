@@ -799,17 +799,6 @@ export const DashboardTeamRecruitment = () => {
                             <div className="flex flex-col gap-4">
                                 {/* Social Links */}
                                 <div className="flex gap-2">
-                                    {/* <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="flex-1"
-                                        onClick={() => selectedApplicationDetails?.email && (window.location.href = `mailto:${selectedApplicationDetails.email}`)}
-                                        disabled={!selectedApplicationDetails?.email}
-                                    >
-                                        Email
-                                        <MailIcon className="ml-1 h-3 w-3" />
-                                    </Button> */}
-
                                     <Button
                                         variant="outline"
                                         size="sm"

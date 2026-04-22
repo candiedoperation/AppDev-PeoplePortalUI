@@ -26,6 +26,7 @@ import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, C
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toast } from "sonner";
 
 // --- Interfaces matching the Backend ---
 
@@ -193,6 +194,16 @@ export const DashboardPeopleInfo = () => {
         }))
         .filter(entry => entry.teamInfo !== undefined);
 
+    const copyToClipboard = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.info("Email copied to clipboard");
+        }
+        catch (err) {
+            toast.error("Failed to copy email");
+        }    
+    };
+
     return (
         <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
             {/* Left Column: User Profile Sidebar (Slim) */}
@@ -233,9 +244,12 @@ export const DashboardPeopleInfo = () => {
                     <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
                         <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 shrink-0" />
-                            <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
+                            {/* <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
                                 {user.email}
-                            </a>
+                            </a> */}
+                            <button onClick={() => {copyToClipboard(user.email)}} className="hover:text-primary hover:underline cursor-pointer truncate transition-colors" title={user.email}>
+                                {user.email}
+                            </button>
                         </div>
 
                         {attributes?.phoneNumber && (

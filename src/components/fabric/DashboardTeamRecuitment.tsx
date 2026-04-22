@@ -799,7 +799,7 @@ export const DashboardTeamRecruitment = () => {
                             <div className="flex flex-col gap-4">
                                 {/* Social Links */}
                                 <div className="flex gap-2">
-                                    <Button
+                                    {/* <Button
                                         variant="outline"
                                         size="sm"
                                         className="flex-1"
@@ -807,6 +807,29 @@ export const DashboardTeamRecruitment = () => {
                                         disabled={!selectedApplicationDetails?.email}
                                     >
                                         Email
+                                        <MailIcon className="ml-1 h-3 w-3" />
+                                    </Button> */}
+
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="flex-1"
+                                        onClick={async () => {
+                                            const email = selectedApplicationDetails?.email;
+                                            if (email) {
+                                                try {
+                                                    await navigator.clipboard.writeText(selectedApplicationDetails.email);
+                                                    toast.info("Email copied to clipboard.");
+                                                }
+                                                catch (err) {
+                                                    toast.error("Failed to copy email");
+                                                }
+                                                
+                                            }
+                                        }}
+                                        disabled={!selectedApplicationDetails?.email}
+                                    >
+                                        Copy Email
                                         <MailIcon className="ml-1 h-3 w-3" />
                                     </Button>
 

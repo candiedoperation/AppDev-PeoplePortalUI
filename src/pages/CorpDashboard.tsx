@@ -26,6 +26,7 @@ import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
+import { Events } from "./Events"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -187,6 +188,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
+                        <Route path="/community/events" element={<Events />} />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>
                 </div>

@@ -467,9 +467,17 @@ const AddTeamMembersDialog = (props: { teamPk?: string, subteams: TeamInfo[], op
     ])
 
     const handleMemberAdd = async () => {
+        if (currentTab == "invite") {
+            const nameParts = inviteeName.trim().split(/\s+/);
+            if (nameParts.length < 2) {
+                toast.error("Please enter both a first and last name before sending an invite.");
+                return;
+            }
+        }
         if (currentTab == "existing") {
             if (!selectedSubTeam || !selectedExistingMember)
                 return
+            setIsLoading(true)
 
             setIsLoading(true)
             fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${selectedSubTeam.pk}/addmember`, {

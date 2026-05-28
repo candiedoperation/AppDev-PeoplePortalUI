@@ -22,3 +22,14 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.`;
 }
+
+export function formatHour(hour: number): string {
+  const h = Math.floor(hour);
+  return `${h % 12 || 12} ${h >= 12 ? "PM" : "AM"}`;
+};
+
+export function formatTime(hour: number): string {
+  const h = Math.floor(hour);
+  const m = Math.floor((hour - h) * 60);
+  return `${h % 12 || 12}${m > 0 ? `:${m.toString().padStart(2, "0")}` : ""} ${h >= 12 ? "PM" : "AM"}`;
+}

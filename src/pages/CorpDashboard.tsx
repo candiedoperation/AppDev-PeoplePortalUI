@@ -29,6 +29,8 @@ import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
 import { Events } from "./Events"
 import { EventAttendance } from "./EventAttendance"
 import { ExecStats } from "./ExecStats"
+import { ArchiveTeams } from "./ArchiveTeams"
+import { Settings } from "./Settings"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -81,6 +83,12 @@ const translateBreadcrumbPath = (path: string) => {
 
         case "stats":
             return "Stats"
+
+        case "archive-teams":
+            return "Archive Teams"
+
+        case "settings":
+            return "Settings"
 
         default:
             return path
@@ -203,6 +211,14 @@ export const CorpDashboard = () => {
                         <Route
                             path="/exec/stats"
                             element={userInfo.isExecutive ? <ExecStats /> : <Navigate to="/org/people" />}
+                        />
+                        <Route
+                            path="/exec/archive-teams"
+                            element={userInfo.isExecutive ? <ArchiveTeams /> : <Navigate to="/org/people" />}
+                        />
+                        <Route
+                            path="/exec/settings"
+                            element={userInfo.isExecutive ? <Settings /> : <Navigate to="/org/people" />}
                         />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>

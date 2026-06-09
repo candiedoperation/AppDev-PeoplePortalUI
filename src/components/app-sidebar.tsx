@@ -19,8 +19,10 @@
 import { Link } from "react-router-dom"
 import * as React from "react"
 import {
+    BarChart3Icon,
     BookOpen,
     Building2,
+    CrownIcon,
     FingerprintIcon,
     FolderGit2Icon,
     LifeBuoyIcon,
@@ -47,29 +49,17 @@ import {
 import logo from "../assets/logo.svg"
 import type { CorpUserInfo } from "@/pages/CorpDashboard"
 
-const data = {
-    navMain: [
+const buildNavMain = (isExecutive: boolean) => {
+    const sections = [
         {
             title: "Organization",
             url: "#",
             icon: Building2,
             isActive: true,
             items: [
-                {
-                    icon: PersonStandingIcon,
-                    title: "People",
-                    url: "/org/people",
-                },
-                {
-                    icon: UsersRoundIcon,
-                    title: "Teams",
-                    url: "/org/teams",
-                },
-                {
-                    icon: NetworkIcon,
-                    title: "Org Chart",
-                    url: "/org/orgchart",
-                },
+                { icon: PersonStandingIcon, title: "People", url: "/org/people" },
+                { icon: UsersRoundIcon, title: "Teams", url: "/org/teams" },
+                { icon: NetworkIcon, title: "Org Chart", url: "/org/orgchart" },
             ],
         },
         {
@@ -77,16 +67,8 @@ const data = {
             url: "#",
             icon: Terminal,
             items: [
-                {
-                    icon: FolderGit2Icon,
-                    title: "Source Code Repository",
-                    url: "https://git.appdevclub.com",
-                },
-                {
-                    icon: FingerprintIcon,
-                    title: "Identity Management Portal",
-                    url: "https://auth.appdevclub.com",
-                },
+                { icon: FolderGit2Icon, title: "Source Code Repository", url: "https://git.appdevclub.com" },
+                { icon: FingerprintIcon, title: "Identity Management Portal", url: "https://auth.appdevclub.com" },
             ],
         },
         {
@@ -94,11 +76,7 @@ const data = {
             url: "#",
             icon: Users,
             items: [
-                {
-                    icon: TicketIcon,
-                    title: "Events",
-                    url: "/community/events",
-                },
+                { icon: TicketIcon, title: "Events", url: "/community/events" },
             ],
         },
         {
@@ -106,19 +84,24 @@ const data = {
             url: "#",
             icon: BookOpen,
             items: [
-                {
-                    icon: ScaleIcon,
-                    title: "Licensing",
-                    url: "/platform/license",
-                },
-                {
-                    icon: LifeBuoyIcon,
-                    title: "Support Docs",
-                    url: "https://wiki.appdevclub.com/people-portal-user-guide/intro",
-                },
+                { icon: ScaleIcon, title: "Licensing", url: "/platform/license" },
+                { icon: LifeBuoyIcon, title: "Support Docs", url: "https://wiki.appdevclub.com/people-portal-user-guide/intro" },
             ],
         },
-    ],
+    ]
+
+    if (isExecutive) {
+        sections.push({
+            title: "Executive",
+            url: "#",
+            icon: CrownIcon,
+            items: [
+                { icon: BarChart3Icon, title: "Stats", url: "/exec/stats" },
+            ],
+        })
+    }
+
+    return sections
 }
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar> & { userInfo: CorpUserInfo }) {
@@ -142,7 +125,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar> & 
                 </SidebarMenu>
             </SidebarHeader>
             <SidebarContent>
-                <NavMain items={data.navMain} />
+                <NavMain items={buildNavMain(props.userInfo.isExecutive)} />
             </SidebarContent>
             <SidebarFooter>
                 <NavUser user={{

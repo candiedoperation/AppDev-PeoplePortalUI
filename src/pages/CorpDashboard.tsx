@@ -27,6 +27,7 @@ import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualizat
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
 import { Events } from "./Events"
+import { EventAttendance } from "./EventAttendance"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -189,6 +190,7 @@ export const CorpDashboard = () => {
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
                         <Route path="/community/events" element={<Events />} />
+                        <Route path="/community/events/:eventId/attendance" element={<EventAttendance />} />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>
                 </div>

@@ -88,7 +88,7 @@ interface UserInformationDetail extends UserInformationBrief {
     }[];
 }
 
-// Team info from /api/org/people/{username}/memberof
+// Team info from /api/org/people/{username}/memberships
 interface TeamInformationBrief {
     name: string;
     pk: string;
@@ -99,6 +99,8 @@ interface TeamInformationBrief {
     description: string;
     friendlyName: string;
     peoplePortalCreation: boolean;
+    parentName?: string;
+    parentFriendlyName?: string;
 }
 
 // Reusable Info Card Component
@@ -138,15 +140,15 @@ export const DashboardPeopleInfo = () => {
                 const userData: UserInformationDetail = await userRes.json();
                 setUser(userData);
 
-                // 2. Fetch user's root teams using their username
-                const teamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userData.username}/memberof`, {
+                // 2. Fetch user's team memberships using their username
+                const teamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userData.username}/memberships`, {
                     credentials: 'include'
                 });
                 if (teamsRes.ok) {
                     const teamsData = await teamsRes.json();
                     // Build map: teamPk -> TeamInfo
                     const teamsMap = new Map<string, TeamInformationBrief>();
-                    for (const team of teamsData.teams || []) {
+                    for (const team of teamsData.memberships || []) {
                         teamsMap.set(team.pk, team);
                     }
                     setUserTeamsMap(teamsMap);
@@ -201,7 +203,7 @@ export const DashboardPeopleInfo = () => {
         }
         catch (err) {
             toast.error("Failed to copy email");
-        }    
+        }
     };
 
     return (
@@ -244,7 +246,7 @@ export const DashboardPeopleInfo = () => {
                     <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
                         <div className="flex items-center gap-2">
                             <Mail className="h-4 w-4 shrink-0" />
-                            <button onClick={() => {copyToClipboard(user.email)}} className="hover:text-primary hover:underline cursor-pointer truncate transition-colors" title={user.email}>
+                            <button onClick={() => { copyToClipboard(user.email) }} className="hover:text-primary hover:underline cursor-pointer truncate transition-colors" title={user.email}>
                                 {user.email}
                             </button>
                         </div>
@@ -311,9 +313,20 @@ export const DashboardPeopleInfo = () => {
                                     <CardContent className="p-3">
                                         <div className="flex flex-col gap-1.5">
                                             <div className="flex items-center justify-between gap-2">
-                                                <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
-                                                    {teamInfo?.friendlyName || "Unknown Team"}
-                                                </CardTitle>
+                                                {teamInfo?.parentFriendlyName || teamInfo?.parentName ? (
+                                                    <div className="flex flex-col gap-0.5 min-w-0">
+                                                        <span className="text-sm font-bold text-foreground truncate" title={teamInfo.parentFriendlyName || teamInfo.parentName}>
+                                                            {teamInfo.parentFriendlyName || teamInfo.parentName}
+                                                        </span>
+                                                        <CardTitle className="text-[10px] text-muted-foreground uppercase tracking-wider truncate" title={teamInfo.friendlyName || teamPk}>
+                                                            {teamInfo.friendlyName}
+                                                        </CardTitle>
+                                                    </div>
+                                                ) : (
+                                                    <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
+                                                        {teamInfo?.friendlyName || "Unknown Team"}
+                                                    </CardTitle>
+                                                )}
                                                 {teamInfo?.teamType && (
                                                     <Badge variant="secondary" className="text-[9px] h-4 px-1 rounded font-normal text-muted-foreground shrink-0">
                                                         {teamInfo.teamType}
@@ -324,12 +337,6 @@ export const DashboardPeopleInfo = () => {
                                                 <Briefcase className="h-3 w-3" />
                                                 {roleTitle}
                                             </div>
-
-                                            {teamInfo?.description && (
-                                                <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5" title={teamInfo.description}>
-                                                    {teamInfo.description}
-                                                </p>
-                                            )}
 
                                             <div className="flex items-center justify-between pt-1.5 border-t text-[10px] text-muted-foreground mt-1">
                                                 <div className="flex items-center gap-1">

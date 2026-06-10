@@ -612,8 +612,9 @@ export const DashboardTeamRecruitment = () => {
                             {(/* column */ col) => {
                                 const column = col as StageDefinition;
                                 return (
-                                    <KanbanBoard id={column.id} className="min-w-[250px] ring-inset">
-                                        <KanbanHeader >{column.name} ({applications.filter(a => a.stage === column.id).length})</KanbanHeader>
+                                    <div className="w-[250px] shrink-0">
+                                    <KanbanBoard id={column.id} className="w-full ring-inset">
+                                        <KanbanHeader>{column.name} ({applications.filter(a => a.stage === column.id).length})</KanbanHeader>
                                         <KanbanCards id={column.id}>
                                             {(item: KanbanApplicationCard) => {
                                                 return (
@@ -649,6 +650,7 @@ export const DashboardTeamRecruitment = () => {
                                             }}
                                         </KanbanCards>
                                     </KanbanBoard>
+                                    </div>
                                 )
                             }}
                         </KanbanProvider>

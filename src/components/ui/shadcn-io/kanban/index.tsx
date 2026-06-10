@@ -130,8 +130,7 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
             className
           )}
         >
-          {/* Content with higher z-index for interactivity */}
-          <div className="relative z-10" style={{ padding: '0px' }}>
+          <div className="relative z-10 w-full overflow-hidden" style={{ padding: '0px' }}>
             {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
           </div>
         </Card>
@@ -146,7 +145,7 @@ export const KanbanCard = <T extends KanbanItemProps = KanbanItemProps>({
               className
             )}
           >
-            <div className="relative z-10" style={{ padding: '0px' }}>
+            <div className="relative z-10 w-full overflow-hidden" style={{ padding: '0px' }}>
               {children ?? <p className="m-0 font-medium text-sm">{name}</p>}
             </div>
           </Card>
@@ -172,7 +171,7 @@ export const KanbanCards = <T extends KanbanItemProps = KanbanItemProps>({
   const items = filteredData.map((item) => item.id);
 
   return (
-    <ScrollArea className="overflow-hidden">
+    <div className="overflow-x-hidden overflow-y-auto w-full">
       <SortableContext items={items}>
         <div
           className={cn('flex flex-grow flex-col gap-2 p-2', className)}
@@ -181,8 +180,7 @@ export const KanbanCards = <T extends KanbanItemProps = KanbanItemProps>({
           {filteredData.map(children)}
         </div>
       </SortableContext>
-      <ScrollBar orientation="vertical" />
-    </ScrollArea>
+    </div>
   );
 };
 
@@ -345,7 +343,7 @@ export const KanbanProvider = <
       >
         <div
           className={cn(
-            'grid size-full auto-cols-fr grid-flow-col gap-4',
+            'flex flex-row size-full gap-4',
             className
           )}
         >

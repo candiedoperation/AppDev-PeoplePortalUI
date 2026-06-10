@@ -20,6 +20,7 @@ import React from "react"
 import { toast } from "sonner"
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -31,7 +32,18 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table"
-import { ArchiveIcon, SearchIcon, UsersRound } from "lucide-react"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { ArchiveIcon, Loader2, SearchIcon, UsersRound } from "lucide-react"
 
 /* ─────────────────────────────────────────────
    Data types
@@ -45,15 +57,13 @@ interface TeamInformationBrief {
     seasonType: string
     seasonYear: number
     description?: string
+    /* ISO timestamp set when the team has been archived; absent means active */
+    archivedAt?: string
 }
 
 interface GetTeamsListResponse {
     teams: TeamInformationBrief[]
     nextCursor?: string
-}
-
-interface OrgSettings {
-    currentYear: string
 }
 
 /* ─────────────────────────────────────────────
@@ -66,9 +76,14 @@ interface TeamsTableProps {
     search: string
     onSearchChange: (value: string) => void
     emptyLabel: string
+    /* When provided, renders an Actions column with an Archive button per row */
+    onArchive?: (team: TeamInformationBrief) => Promise<void>
+    archivingPk?: string | null
 }
 
-const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: TeamsTableProps) => {
+const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel, onArchive, archivingPk }: TeamsTableProps) => {
+    const showActions = !!onArchive
+    const columnCount = showActions ? 5 : 4
     const filtered = React.useMemo(() => {
         const q = search.trim().toLowerCase()
         if (!q) return teams
@@ -91,15 +106,15 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
                 />
             </div>
 
-            <div className="rounded-md border">
-                <Table>
+            <div className="w-full rounded-md border">
+                <Table className="w-full table-fixed">
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Team Name</TableHead>
-                            <TableHead>Description</TableHead>
-                            <TableHead>Vertical</TableHead>
-                            <TableHead>Season</TableHead>
-                            <TableHead>Shared Resources ID</TableHead>
+                            <TableHead className="w-[30%]">Team Name</TableHead>
+                            <TableHead className="w-[32%]">Description</TableHead>
+                            <TableHead className="w-[14%]">Vertical</TableHead>
+                            <TableHead className="w-[16%]">Shared Resources ID</TableHead>
+                            {showActions && <TableHead className="w-[10%] text-right">Actions</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -117,13 +132,13 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
                                     </TableCell>
                                     <TableCell><Skeleton className="h-4 w-48" /></TableCell>
                                     <TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell>
-                                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                                    {showActions && <TableCell><Skeleton className="ml-auto h-8 w-20" /></TableCell>}
                                 </TableRow>
                             ))
                         ) : filtered.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="h-32 text-center">
+                                <TableCell colSpan={columnCount} className="h-32 text-center">
                                     <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                         <ArchiveIcon className="size-8" />
                                         <span>{search.trim() ? "No teams match your search." : emptyLabel}</span>
@@ -135,11 +150,11 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
                                 <TableRow key={team.pk}>
                                     <TableCell>
                                         <div className="flex items-center">
-                                            <div className="flex size-9 items-center justify-center rounded-lg border bg-orange-100 text-orange-600">
+                                            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-orange-100 text-orange-600">
                                                 <UsersRound size={18} />
                                             </div>
-                                            <div className="ml-3 flex flex-col">
-                                                <span className="text-sm font-medium">{team.friendlyName}</span>
+                                            <div className="ml-3 flex min-w-0 flex-col">
+                                                <span className="truncate text-sm font-medium" title={team.friendlyName}>{team.friendlyName}</span>
                                                 <span className="text-xs text-muted-foreground">
                                                     {`${team.seasonType} ${team.seasonYear}`}
                                                 </span>
@@ -148,7 +163,7 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
                                     </TableCell>
                                     <TableCell>
                                         {team.description
-                                            ? <span className="line-clamp-1 max-w-[300px] text-sm text-muted-foreground" title={team.description}>{team.description}</span>
+                                            ? <span className="block truncate text-sm text-muted-foreground" title={team.description}>{team.description}</span>
                                             : <span className="text-sm text-muted-foreground">No description</span>
                                         }
                                     </TableCell>
@@ -156,15 +171,44 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
                                         <Badge variant="secondary">{team.teamType}</Badge>
                                     </TableCell>
                                     <TableCell>
-                                        <span className="text-sm text-muted-foreground">
-                                            {`${team.seasonType} ${team.seasonYear}`}
-                                        </span>
-                                    </TableCell>
-                                    <TableCell>
-                                        <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs text-muted-foreground">
+                                        <code className="block truncate rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs text-muted-foreground" title={team.name}>
                                             {team.name}
                                         </code>
                                     </TableCell>
+                                    {showActions && (
+                                        <TableCell className="text-right">
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={archivingPk === team.pk}
+                                                    >
+                                                        {archivingPk === team.pk
+                                                            ? <Loader2 className="size-4 animate-spin" />
+                                                            : <ArchiveIcon className="size-4" />}
+                                                        Archive
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Archive {team.friendlyName}?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            This makes the team's shared resources (Gitea repositories,
+                                                            Slack channels) read-only while preserving all data. The team
+                                                            will move to the Archived tab. This can be undone later.
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => onArchive!(team)}>
+                                                            Archive
+                                                        </AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </TableCell>
+                                    )}
                                 </TableRow>
                             ))
                         )}
@@ -187,29 +231,21 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel }: Team
 
 export const ArchiveTeams = () => {
     const [loading, setLoading] = React.useState(true)
-    const [currentYear, setCurrentYear] = React.useState<number | null>(null)
     const [teams, setTeams] = React.useState<TeamInformationBrief[]>([])
     const [activeSearch, setActiveSearch] = React.useState("")
     const [archivedSearch, setArchivedSearch] = React.useState("")
+    const [archivingPk, setArchivingPk] = React.useState<string | null>(null)
 
     React.useEffect(() => {
         const load = async () => {
             setLoading(true)
             try {
-                /* Resolve the current program year from settings (fall back to calendar year) */
-                const settingsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/exec/settings`)
-                const settings: OrgSettings = settingsRes.ok
-                    ? await settingsRes.json()
-                    : { currentYear: String(new Date().getFullYear()) }
-                const year = parseInt(settings.currentYear) || new Date().getFullYear()
-                setCurrentYear(year)
-
                 /* Walk the cursor-paginated teams list to collect every team */
                 const allTeams: TeamInformationBrief[] = []
                 let cursor = ""
                 /* Guard against runaway loops */
                 for (let i = 0; i < 100; i++) {
-                    const params = new URLSearchParams({ limit: "50" })
+                    const params = new URLSearchParams({ limit: "50", includeArchived: "true" })
                     if (cursor) params.append("cursor", cursor)
 
                     const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams?${params.toString()}`)
@@ -232,13 +268,12 @@ export const ArchiveTeams = () => {
         load()
     }, [])
 
-    /* Active = rolling or current/future-season teams; Archived = past-season, non-rolling */
+    /* Archived = explicitly archived (archivedAt set); everything else is active */
     const { active, archived } = React.useMemo(() => {
-        const year = currentYear ?? new Date().getFullYear()
         const active: TeamInformationBrief[] = []
         const archived: TeamInformationBrief[] = []
         for (const team of teams) {
-            if (team.seasonType !== "ROLLING" && team.seasonYear < year) archived.push(team)
+            if (team.archivedAt) archived.push(team)
             else active.push(team)
         }
         const byNameThenYear = (a: TeamInformationBrief, b: TeamInformationBrief) =>
@@ -246,7 +281,28 @@ export const ArchiveTeams = () => {
         active.sort(byNameThenYear)
         archived.sort(byNameThenYear)
         return { active, archived }
-    }, [teams, currentYear])
+    }, [teams])
+
+    /* Archive a root team, then mark it archived locally so it moves tabs */
+    const handleArchive = async (team: TeamInformationBrief) => {
+        setArchivingPk(team.pk)
+        try {
+            const res = await fetch(
+                `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${team.pk}/archive`,
+                { method: "POST" }
+            )
+            if (!res.ok) throw new Error(res.statusText)
+
+            setTeams(prev => prev.map(t =>
+                t.pk === team.pk ? { ...t, archivedAt: new Date().toISOString() } : t
+            ))
+            toast.success(`${team.friendlyName} has been archived.`)
+        } catch (e: any) {
+            toast.error("Failed to archive team: " + e.message)
+        } finally {
+            setArchivingPk(null)
+        }
+    }
 
     return (
         <div className="flex min-h-full flex-col gap-6">
@@ -273,6 +329,8 @@ export const ArchiveTeams = () => {
                         search={activeSearch}
                         onSearchChange={setActiveSearch}
                         emptyLabel="No active teams."
+                        onArchive={handleArchive}
+                        archivingPk={archivingPk}
                     />
                 </TabsContent>
 

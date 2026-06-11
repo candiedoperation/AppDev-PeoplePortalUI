@@ -22,7 +22,6 @@ import { Toaster } from 'sonner'
 import { CorpDashboard } from './pages/CorpDashboard'
 import { ThemeProvider } from './components/fabric/ThemeProvider'
 import { ATSDashboard } from './pages/ATSDashboard'
-import { Events } from './components/fabric/Events'
 
 function App() {
   return (

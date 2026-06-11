@@ -33,6 +33,10 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+
+type Visibility = "public" | "internal" | "exec"
+type MarketingChannels = "email" | "slack" | "discord"
+
 interface EventDoc {
     _id: string
     eventName: string
@@ -40,12 +44,9 @@ interface EventDoc {
     startTime: string
     endTime: string
     location: string
-    public: boolean
-    slack?: boolean
-    discord?: boolean
+    scope: Visibility
+    marketingChannels: MarketingChannels[]
 }
-
-type Visibility = "public" | "internal"
 
 interface EventForm {
     eventName: string
@@ -53,9 +54,8 @@ interface EventForm {
     startTime: string
     endTime: string
     location: string
-    visibility: Visibility
-    slack: boolean
-    discord: boolean
+    scope: Visibility
+    marketingChannels: Set<MarketingChannels>
     notify: boolean
 }
 
@@ -65,9 +65,8 @@ const emptyForm: EventForm = {
     startTime: "",
     endTime: "",
     location: "",
-    visibility: "internal",
-    slack: false,
-    discord: false,
+    scope: "internal",
+    marketingChannels: new Set<MarketingChannels>(),
     notify: true,
 }
 
@@ -83,9 +82,8 @@ const eventToForm = (event: EventDoc): EventForm => ({
     startTime: toLocalInput(event.startTime),
     endTime: toLocalInput(event.endTime),
     location: event.location,
-    visibility: event.public ? "public" : "internal",
-    slack: event.slack ?? false,
-    discord: event.discord ?? false,
+    scope: event.scope,
+    marketingChannels: new Set(event.marketingChannels),
     notify: true,
 })
 
@@ -108,44 +106,48 @@ const EventsEmptyState = ({ label }: { label: string }) => (
     </div>
 )
 
-const EventCard = ({ event, onEdit }: { event: EventDoc; onEdit: (e: EventDoc) => void }) => {
+const EventCard = ({ event, onEdit }: { event: EventDoc; onEdit?: (e: EventDoc) => void }) => {
     const navigate = useNavigate()
     return (
-        <Card>
-            <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                    <div className="flex flex-col gap-1">
-                        <CardTitle>{event.eventName}</CardTitle>
-                        <CardDescription className="flex items-center gap-1.5">
-                            <ClockIcon className="size-3.5" />
+        <Card className="gap-0 [&>*:first-child]:pt-4 [&>*:last-child]:pb-3">
+            <CardHeader className="pt-1 pb-0">
+                <div className="flex items-start justify-between gap-0">
+                    <div className="flex flex-col items-baseline gap-x-2 gap-y-0.5">
+                        <CardTitle className="text-base">{event.eventName}</CardTitle>
+                        <CardDescription className="flex items-center gap-1 text-m text-muted-foreground">
+                            <ClockIcon className="size-3" />
                             {formatRange(event.startTime, event.endTime)}
                         </CardDescription>
                     </div>
-                    <Badge variant={event.public ? "default" : "secondary"} className="shrink-0">
-                        {event.public ? "Public" : "Internal"}
+                    <Badge variant={event.scope === "public" ? "default" : "secondary"} className="shrink-0">
+                        {event.scope === "exec" ? "Executive" : event.scope.charAt(0).toUpperCase() + event.scope.slice(1)}
                     </Badge>
                 </div>
             </CardHeader>
-            <CardContent className="flex flex-col gap-2">
+            <CardContent className="flex flex-col gap-2 pb-2">
                 <p className="text-sm whitespace-pre-wrap">{event.eventDescription}</p>
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            </CardContent>
+            <CardFooter className="justify-end gap-2">
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mr-auto">
                     <MapPinIcon className="size-3.5" />
                     {event.location}
                 </div>
-            </CardContent>
-            <CardFooter className="justify-end gap-2">
-                <Button variant="outline" size="sm" onClick={() => onEdit(event)}>
-                    <PencilIcon />
-                    Edit
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/community/events/${event._id}/attendance`)}
-                >
-                    <ClipboardListIcon />
-                    Attendance
-                </Button>
+                {
+                    onEdit !== undefined && <>
+                        <Button variant="outline" size="sm" onClick={() => onEdit(event)}>
+                            <PencilIcon />
+                            Edit
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/community/events/${event._id}/attendance`)}
+                        >
+                            <ClipboardListIcon />
+                            Attendance
+                        </Button>
+                    </>
+                }
             </CardFooter>
         </Card>
     )
@@ -179,6 +181,10 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
     const [form, setForm] = useState<EventForm>(emptyForm)
     const [submitting, setSubmitting] = useState(false)
 
+    type SetKeys<T> = {
+        [K in keyof T]: T[K] extends Set<any> ? K : never;
+    }[keyof T];
+
     useEffect(() => {
         if (!open) return
         setForm(mode === "edit" && editingEvent ? eventToForm(editingEvent) : emptyForm)
@@ -187,12 +193,36 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
     const update = <K extends keyof EventForm>(key: K, value: EventForm[K]) =>
         setForm((prev) => ({ ...prev, [key]: value }))
 
+    const updateSet = <K extends SetKeys<EventForm>>(
+        key: K,
+        item: EventForm[K] extends Set<infer U> ? U : never, // Automatically gets the type inside the Set (e.g., string)
+        action: 'add' | 'remove'
+    ) => {
+        setForm((prev) => {
+            // Create a new Set instance from the existing one to trigger a re-render
+            const newSet = new Set(prev[key] as Set<any>);
+
+            if (action === 'add') {
+                newSet.add(item);
+            } else if (action === 'remove') {
+                newSet.delete(item);
+            }
+
+            return {
+                ...prev,
+                [key]: newSet,
+            };
+        });
+    };
+
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
         if (submitting) return
 
         const start = new Date(form.startTime)
         const end = new Date(form.endTime)
+
+
         if (end < start) {
             toast.error("End time can't be before start time.")
             return
@@ -212,9 +242,8 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                         startTime: start.toISOString(),
                         endTime: end.toISOString(),
                         location: form.location,
-                        public: form.visibility === "public",
-                        slack: form.slack,
-                        discord: form.discord,
+                        scope: form.scope,
+                        marketingChannels: [...form.marketingChannels],
                     }),
                 })
             } else {
@@ -322,13 +351,14 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                             <div className="flex flex-col gap-2">
                                 <Label htmlFor="visibility">Visibility</Label>
                                 <Select
-                                    value={form.visibility}
-                                    onValueChange={(v) => update("visibility", v as Visibility)}
+                                    value={form.scope}
+                                    onValueChange={(v) => update("scope", v as Visibility)}
                                 >
                                     <SelectTrigger id="visibility">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="exec">Executive — visible to Executive Board Members only</SelectItem>
                                         <SelectItem value="internal">Internal — visible to members only</SelectItem>
                                         <SelectItem value="public">Public — visible to everyone</SelectItem>
                                     </SelectContent>
@@ -336,19 +366,27 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                             </div>
                             <div className="flex flex-col gap-3 rounded-md border p-3">
                                 <div className="flex items-center justify-between">
+                                    <Label htmlFor="slack">Announce via Email</Label>
+                                    <Switch
+                                        id="email"
+                                        checked={form.marketingChannels.has("email")}
+                                        onCheckedChange={(v) => updateSet("marketingChannels", "email", v ? "add" : "remove")}
+                                    />
+                                </div>
+                                <div className="flex items-center justify-between">
                                     <Label htmlFor="slack">Announce on Slack</Label>
                                     <Switch
                                         id="slack"
-                                        checked={form.slack}
-                                        onCheckedChange={(v) => update("slack", v)}
+                                        checked={form.marketingChannels.has("slack")}
+                                        onCheckedChange={(v) => updateSet("marketingChannels", "slack", v ? "add" : "remove")}
                                     />
                                 </div>
                                 <div className="flex items-center justify-between">
                                     <Label htmlFor="discord">Announce on Discord</Label>
                                     <Switch
                                         id="discord"
-                                        checked={form.discord}
-                                        onCheckedChange={(v) => update("discord", v)}
+                                        checked={form.marketingChannels.has("discord")}
+                                        onCheckedChange={(v) => updateSet("marketingChannels", "discord", v ? "add" : "remove")}
                                     />
                                 </div>
                             </div>
@@ -407,7 +445,7 @@ export const Events = () => {
                         credentials: "include",
                     })
                     if (!r.ok) return null
-                    return (await r.json()) as EventDoc
+                    return (await r.json()).data as EventDoc
                 })
             )
             setEvents(docs.filter((d): d is EventDoc => d !== null))

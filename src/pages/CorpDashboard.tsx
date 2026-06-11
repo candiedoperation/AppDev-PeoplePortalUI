@@ -26,8 +26,8 @@ import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
-import { Events } from "./Events"
-import { EventAttendance } from "./EventAttendance"
+import { Events } from "../components/fabric/Events"
+import { EventAttendance } from "../components/fabric/EventAttendance"
 import {
     Breadcrumb,
     BreadcrumbItem,

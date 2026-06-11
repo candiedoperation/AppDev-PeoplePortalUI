@@ -232,7 +232,7 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
         try {
             let res: Response
             if (mode === "create") {
-                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/createevent`, {
+                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/`, {
                     method: "POST",
                     credentials: "include",
                     headers: { "Content-Type": "application/json" },
@@ -248,7 +248,7 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                 })
             } else {
                 if (!editingEvent) return
-                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}/update`, {
+                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}`, {
                     method: "PATCH",
                     credentials: "include",
                     headers: { "Content-Type": "application/json" },

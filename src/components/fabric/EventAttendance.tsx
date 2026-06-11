@@ -32,6 +32,8 @@ import { ArrowLeftIcon, ClockIcon, Loader2, MapPinIcon, PencilIcon, Trash2Icon }
 import { useCallback, useEffect, useState, type FormEvent } from "react"
 import { redirect, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "../ui/pagination"
+import React from "react"
 
 
 type Visibility = "public" | "internal" | "exec"
@@ -152,7 +154,7 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
             if (!editingEvent) return
             let res: Response
             if (mode === "edit") {
-                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}/update`, {
+                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}`, {
                     method: "PATCH",
                     credentials: "include",
                     headers: { "Content-Type": "application/json" },
@@ -166,7 +168,7 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                     }),
                 })
             } else if (mode === "cancel") {
-                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}/cancel`, {
+                res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${editingEvent._id}`, {
                     method: "DELETE",
                     credentials: "include",
                     headers: { "Content-Type": "application/json" },
@@ -215,7 +217,7 @@ const EventFormDialog = ({ open, onOpenChange, mode, editingEvent, onSaved }: Ev
                         {isEdit ? "Update the details of this event." : "Cancel the event."}
                     </DialogDescription>
                     {!isEdit && <>
-                        <h2>!! WARNING !!</h2>
+                        <h1><b>WARNING</b></h1>
                         <p>This is an irreversible action. Ensure that this event should be deleted before continuing.</p>    
                     </>}
                 </DialogHeader>
@@ -305,10 +307,15 @@ export const EventAttendance = () => {
     const { eventId } = useParams()
     const navigate = useNavigate()
     const [event, setEvent] = useState<EventDoc | null>(null)
-    const [rsvp, setRsvp] = useState<RsvpDoc | null>(null);
-    const [rsvps, setRsvps] = useState<RsvpDoc[]>([])
+    const [rsvp, setRsvp] = useState<RsvpDoc | null>(null)
     const [loading, setLoading] = useState(true)
+
+    const [rsvps, setRsvps] = useState<RsvpDoc[]>([])
+    const [page, setPage] = useState<number>(1)
+    const [debouncedPage, setDebouncedPage] = useState<number>(1);
+    const [totalPages, setTotalPages] = useState<number>(0)
     const [showRsvps, setShowRsvps] = useState(false)
+    const [rsvpsLoading, setRsvpsLoading] = useState(false)
 
     const [accept, setAccept] = useState<boolean>(true)
     const [updating, setUpdating] = useState(false)
@@ -316,6 +323,13 @@ export const EventAttendance = () => {
     const [dialogOpen, setDialogOpen] = useState(false)
     const [dialogMode, setDialogMode] = useState<"edit" | "cancel">("edit")
     const [editingEvent, setEditingEvent] = useState<EventDoc | undefined>(undefined)
+
+    React.useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedPage(page);
+        }, 250);
+        return () => clearTimeout(handler); 
+    }, [page])
 
     const openEdit = (event: EventDoc) => {
         setEditingEvent(event)
@@ -328,7 +342,6 @@ export const EventAttendance = () => {
         setDialogMode("cancel")
         setDialogOpen(true)
     }
-
 
     const submitRsvp = async (acceptRsvp: boolean) => {
         
@@ -347,17 +360,46 @@ export const EventAttendance = () => {
         }
 
         toast.success("Successfully RSVP'd to event!");
-        load();
+
+        const rsvpRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}/rsvp`, { credentials: "include" })
+        if (rsvpRes.ok) {
+            setRsvp((await rsvpRes.json()).rsvp)
+        } else {
+            toast.error(`Failed to refresh RSVP: ${rsvpRes.statusText}`)
+            return
+        }
     }   
+
+    /* Pagination Logic Helpers */
+    const getPageNumbers = () => {
+        const pages = [];
+        const maxVisiblePages = 5;
+
+        let startPage = Math.max(1, page - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage + 1 < maxVisiblePages) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            pages.push(i);
+        }
+        return pages;
+    };
 
     const load = useCallback(async () => {
         if (!eventId) return
         setLoading(true)
         try {
+            const queryString = new URLSearchParams({
+                page: "1",
+                pageSize: "25",
+            })
             const [eventRes, rsvpRes, allRsvpRes] = await Promise.all([
                 fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}`, { credentials: "include" }),
                 fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}/rsvp`, { credentials: "include" }),
-                fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}/rsvps`, { credentials: "include" }),
+                fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}/rsvps?${queryString}`, { credentials: "include" }),
             ])
 
             if (!eventRes.ok) {
@@ -379,8 +421,10 @@ export const EventAttendance = () => {
                 setRsvps([])
             } else if (allRsvpRes.ok) {
                 setShowRsvps(true)
-                const rsvpData: { data: RsvpDoc[] } = await allRsvpRes.json()
-                setRsvps(rsvpData.data ?? [])
+                const rsvpJson = await allRsvpRes.json();
+                setRsvps(rsvpJson.data ?? [])
+                setTotalPages(rsvpJson.pagination.totalPages)
+                setPage(1)
             } else {
                 setShowRsvps(true)
                 toast.error(`Failed to load RSVPs: ${allRsvpRes.statusText}`)
@@ -396,6 +440,32 @@ export const EventAttendance = () => {
     useEffect(() => {
         load()
     }, [load])
+
+    const refreshList = () => {
+        setRsvpsLoading(true)
+        const queryString = new URLSearchParams({
+                page: debouncedPage.toString(),
+                pageSize: "25",
+            })
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/events/${eventId}/rsvps?${queryString}`, { credentials: "include" })
+            .then(async (res) => {
+                const rsvpJson = await res.json()
+                if (!res.ok) {
+                    throw new Error(rsvpJson.message || "Failed to fetch RSVP data")
+                }
+                setRsvps(rsvpJson.data ?? [])
+                setTotalPages(rsvpJson.pagination.totalPages)
+            })
+            .catch((e) => {
+                toast.error(`Failed to fetch RSVPs: ${e.message}`)
+            })
+            .finally(() => {
+                setRsvpsLoading(false)
+            })
+    }
+    React.useEffect(() => {
+        refreshList()
+    }, [debouncedPage]);
 
 
     return (
@@ -445,7 +515,7 @@ export const EventAttendance = () => {
                         </div>
                         {
                             // showRsvps is only true if user has event management perms, so show edit and cancel event buttons.
-                            showRsvps !== undefined && <>
+                            showRsvps && <>
                                 <Button variant="outline" size="sm" onClick={() => {openEdit(event)}}>
                                     <PencilIcon />
                                     Edit
@@ -555,25 +625,56 @@ export const EventAttendance = () => {
                     </Card>
                 )}
 
-
                 { (!loading && showRsvps) &&
                     <>
-                    <h2 className="text-xl font-semibold">All RSVPs</h2>
+                    <div className="flex items-center justify-between mt-3">
+                    <h2 className="text-xl font-semibold mt-3">All RSVPs</h2>
+                    
+                    {rsvps.length > 0 && (
+                        <PaginationContent>
+                            <PaginationItem>
+                                <PaginationPrevious 
+                                    href="#"
+                                    onClick={(e) => { e.preventDefault(); if (page > 1) setPage(p => p - 1) }}
+                                    className={page === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                            {getPageNumbers().map(p => (
+                                <PaginationItem key={p}>
+                                    <PaginationLink
+                                        href="#"
+                                        isActive={p === page}
+                                        onClick={(e) => { e.preventDefault(); setPage(p) }}
+                                    >
+                                        {p}
+                                    </PaginationLink>
+                                </PaginationItem>
+                            ))}
+                            <PaginationItem>
+                                <PaginationNext
+                                    href="#"
+                                    onClick={(e) => { e.preventDefault(); if (page < totalPages) setPage(p => p + 1) }}
+                                    className={page === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                                />
+                            </PaginationItem>
+                        </PaginationContent>
+                    )}
+                    </div>
                     {rsvps.length === 0 ? (
                         <div className="rounded-lg border border-dashed py-12 text-center text-muted-foreground">
                             No RSVPs yet.
                         </div>
                     ) : (
-                        <div className="rounded-lg border">
+                        <div className="rounded-lg border mb-10">
                             <Table>
                                 <TableHeader>
-                                    <TableRow>
+                                    <TableRow className="relative">
                                         <TableHead>Email</TableHead>
                                         <TableHead>Status</TableHead>
                                         <TableHead>Responded</TableHead>
                                     </TableRow>
                                 </TableHeader>
-                                <TableBody>
+                                <TableBody className={`${rsvpsLoading ? "opacity-50" : ""}`}>
                                     {rsvps.map((r) => (
                                         <TableRow key={r._id}>
                                             <TableCell className="font-medium">{r.email}</TableCell>

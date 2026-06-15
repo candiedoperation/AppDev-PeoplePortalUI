@@ -33,6 +33,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../ui/select';
 import { toast } from 'sonner';
+import { DialogDescription } from '@radix-ui/react-dialog';
 
 // --- Interfaces matching the Backend ---
 
@@ -151,6 +152,8 @@ export const DashboardPeopleInfo = () => {
 
     const [expandReviewDialogOpen, setExpandReviewDialogOpen] = useState(false);
     const [selectedReview, setSelectedReview] = useState<ReviewData | null>(null);
+
+    const [deleteReviewDialogOpen, setDeleteReviewDialogOpen] = useState(false);
 
     const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
     const [userInfoCache, setUserInfoCache] = useState<Map<number, UserInformationBrief>>(new Map());
@@ -277,10 +280,12 @@ export const DashboardPeopleInfo = () => {
                 open={reviewDialogOpen}
                 openChanged={(open, refresh) => {
                     setReviewDialogOpen(open)
+                    if (!open) setSelectedReview(null);
                 }}
                 reviewTeams={reviewTeams}
                 reviews={reviews}
                 setReviews={setReviews}
+                editReview={selectedReview ?? undefined}
             />
             <ExpandReviewDialog
                 open={expandReviewDialogOpen}
@@ -293,7 +298,16 @@ export const DashboardPeopleInfo = () => {
                 setUserCache={setUserInfoCache}
                 userTeamsMap={userTeamsMap}
             />
-            
+            <DeleteReviewDialog
+                open={deleteReviewDialogOpen}
+                openChanged={(open, refresh) => {
+                    setDeleteReviewDialogOpen(open);
+                    if (!open) setSelectedReview(null);
+                }}
+                review={selectedReview}
+                reviews={reviews}
+                setReviews={setReviews}
+            />
             <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
                 
                 {/* Left Column: User Profile Sidebar (Slim) */}
@@ -489,7 +503,7 @@ export const DashboardPeopleInfo = () => {
                                                     <div className="flex justify-end pt-2 border-t border-border mt-auto">
                                                         <span className="mr-auto">
                                                             <Button
-                                                                onClick={(e) => { e.stopPropagation(); }}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedReview(review); setReviewDialogOpen(true); }}
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 className="h-6 w-5 mr-1 hover:text-green-600 hover:bg-green-50"
@@ -497,7 +511,7 @@ export const DashboardPeopleInfo = () => {
                                                                 { <SquarePen size={12} /> }
                                                             </Button>
                                                             <Button
-                                                                onClick={(e) => { e.stopPropagation(); }}
+                                                                onClick={(e) => { e.stopPropagation(); setSelectedReview(review); setDeleteReviewDialogOpen(true); }}
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 className="h-6 w-6 hover:text-red-600 hover:bg-red-50"
@@ -513,11 +527,11 @@ export const DashboardPeopleInfo = () => {
                                             </Card>
                                         ))}
                                     </div>
-                                    <Button variant={"outline"} onClick={() => setReviewDialogOpen(true)}>Write a review</Button>
+                                    <Button variant={"outline"} onClick={() => { setSelectedReview(null); setReviewDialogOpen(true); }}>Write a new review</Button>
                                 </div>
                                 : <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5 gap-2">
                                     <p className="text-sm text-muted-foreground font-medium">You have not written an internal review for this user yet.</p>
-                                    <Button variant={"outline"} onClick={() => setReviewDialogOpen(true)}>Write a review</Button>
+                                    <Button variant={"outline"} onClick={() => { setSelectedReview(null); setReviewDialogOpen(true); }}>Write a review</Button>
                                 </div>
                             }
                         </section>
@@ -534,6 +548,7 @@ interface ReviewUserDialogProps {
     reviewTeams: TeamInformationBrief[];
     reviews: ReviewData[];
     setReviews: (r: ReviewData[]) => void;
+    editReview?: ReviewData;
 }
 
 const ReviewUserDialog = (props: ReviewUserDialogProps) => {
@@ -541,7 +556,6 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
     const reviewURL = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews`;
 
     const [teamId, setTeamId] = useState<string>('');
-    const [teamName, setTeamName] = useState<string>('None Selected');
     const [rating, setRating] = useState<number>(5);
     const [title, setTitle] = useState<string>('');
     const [content, setContent] = useState<string>('');
@@ -551,28 +565,34 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
     const handleFormSubmit = async () => {
         setIsLoading(true);
 
-        const payload = {
+        const payload = JSON.stringify({
             teamId: teamId,
             rating: rating,
             title: title,
             content: content
-        };
+        });
+
+        const headers = { "Content-Type": "application/json" };
 
         try {
-            const res = await fetch(reviewURL, {
-                credentials: 'include',
-                method: 'POST',
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(payload)
-            });
+            let res: Response;
+
+            if (props.editReview === undefined) {
+                res = await fetch(reviewURL, { credentials: 'include', method: 'POST', headers: headers, body: payload });
+            } else {
+                res = await fetch(`${reviewURL}/${props.editReview._id}`, { credentials: 'include', method: 'PUT', headers: headers, body: payload });
+            }
 
             if (!res.ok) throw new Error((await res.text()));
-
             const resData = await res.json();
 
-            props.setReviews([...props.reviews, resData.review]);
+            if (props.editReview === undefined) {
+                props.setReviews([resData.review, ...props.reviews]);
+            } else {
+                const filtered = props.reviews.filter((r) => r._id !== props.editReview!._id);
+                props.setReviews([resData.review, ...filtered]);
+            }
+            
             toast.success("Review Submitted");
             props.openChanged(false);
 
@@ -583,35 +603,46 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
         }
     }
 
-    const reviewableTeams = useMemo(() => 
-        props.reviewTeams.filter((team) => 
-            props.reviews.findIndex((r) => r.teamId === team.pk) === -1
-        ),
-        [props.reviewTeams, props.reviews]
-    );
+    const reviewableTeams = useMemo(() => {
+        if (props.editReview === undefined) {
+            return props.reviewTeams.filter((team) => 
+                props.reviews.findIndex((r) => r.teamId === team.pk) === -1
+            )
+        }
+        return [props.reviewTeams.find((team) => team.pk === props.editReview!.teamId)!]
+    }, [props.reviewTeams, props.reviews, props.editReview]);
+
+    useEffect(() => {
+        if (props.editReview) {
+            setTeamId(props.editReview.teamId);
+            setTitle(props.editReview.title);
+            setContent(props.editReview.content);
+            setRating(props.editReview.rating);
+        } else {
+            setTeamId('');
+            setTitle('');
+            setContent('');
+            setRating(5);
+        }
+    }, [props.editReview]);
 
 
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
             <DialogContentWide>
                 <DialogHeader>
-                    <DialogTitle>Write a Review</DialogTitle>
-                    {/* <DialogDescription>
-                        Leaving a review will help us understand 
-                    </DialogDescription> */}
+                    <DialogTitle>{props.editReview === undefined ? "Write a Review" : "Edit Review"}</DialogTitle>
                 </DialogHeader>
                 <div className="grid gap-4">
 
                     <div className="grid gap-3">
                         <Label>Team</Label>
-                        <Select required value={teamId} onValueChange={(val) => { 
+                        <Select required disabled={props.editReview !== undefined} value={teamId} onValueChange={(val) => { 
                             const idx = reviewableTeams.findIndex((t) => t.pk === val);
                             if (idx === -1) {
-                                setTeamName("None Selected");
-                                setTeamId('3');
+                                setTeamId('');
                                 return;
                             }
-                            setTeamName(reviewableTeams[idx].friendlyName || reviewableTeams[idx].name);
                             setTeamId(val);
                         }}>
                             <SelectTrigger className="w-full">
@@ -657,7 +688,7 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
                         }
                     >
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Submit Review
+                        Submit
                     </Button>
                 </DialogFooter>
             </DialogContentWide>
@@ -676,19 +707,16 @@ interface ExpandReviewDialogProps {
 }
 
 const ExpandReviewDialog = (props: ExpandReviewDialogProps) => {
-    const [isLoading, setIsLoading] = useState(false);
     const [reviewer, setReviewer] = useState<UserInformationBrief>();
     const review = props.review;
 
     useEffect(() => {
         if (!review) return;
-        setIsLoading(true);
 
         const fetchUserData = async () => {
             const userId = review.creatorId;
             if (props.userCache.has(userId)) {
                 setReviewer(props.userCache.get(userId));
-                setIsLoading(false);
                 return;
             }
 
@@ -701,11 +729,9 @@ const ExpandReviewDialog = (props: ExpandReviewDialogProps) => {
                 setReviewer(userData);
                 props.setUserCache(new Map(props.userCache).set(userId, userData));
             } catch (err) {
-                toast.error(`Failed to fetch user: ${err}`);
+                toast.error(`Failed to fetch reviewer info: ${err}`);
                 console.error(err);
-            } finally {
-                setIsLoading(false);
-            }
+            } finally { }
         }
 
         fetchUserData();
@@ -772,4 +798,72 @@ const ExpandReviewDialog = (props: ExpandReviewDialogProps) => {
             </DialogContentWide>
         </Dialog>
     )
+}
+
+interface DeleteReviewDialogProps {
+    open?: boolean;
+    openChanged(open: boolean, refresh?: boolean): void;
+    review: ReviewData | null;
+    reviews: ReviewData[];
+    setReviews: (r: ReviewData[]) => void;
+}
+
+const DeleteReviewDialog = (props: DeleteReviewDialogProps) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const review = props.review;
+
+    const deleteReview = async () => {
+        if (review === null) {
+            props.openChanged(false);
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const userRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${review.userId}/reviews/${review._id}`, {
+                method: 'DELETE',
+                credentials: 'include'
+            });
+            if (!userRes.ok) throw new Error(userRes.statusText);
+            
+            props.setReviews(props.reviews.filter((r) => r._id !== review._id));
+            toast.success("Review Deleted")
+        } catch (err) {
+            toast.error(`Failed to delete review: ${err}`);
+            console.error(err);
+        } finally {
+            setIsLoading(false);
+            props.openChanged(false);
+        }
+    }
+
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.openChanged}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Delete Review</DialogTitle>
+                    <DialogDescription>
+                        This action cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="flex flex-col gap-1 rounded-lg border bg-muted/5 p-4">
+                    <p className="text-sm font-medium text-foreground">{review?.title}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{review?.content}</p>
+                </div>
+
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline" disabled={isLoading}>Cancel</Button>
+                    </DialogClose>
+                    <Button variant="default" disabled={isLoading} onClick={deleteReview}>
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Delete Review
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+
 }

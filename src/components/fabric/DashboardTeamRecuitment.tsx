@@ -145,6 +145,19 @@ export const DashboardTeamRecruitment = () => {
     const [isFeedbackSubmitting, setIsFeedbackSubmitting] = React.useState(false);
 
 
+    // Update browser tab title when an application is opened/closed
+    React.useEffect(() => {
+        if (selectedApplication) {
+            document.title = `${selectedApplication.name} - ${teamInfo?.attributes?.friendlyName ?? "App Dev Club"}`
+        } else {
+            document.title = "App Dev Club People Portal"
+        }
+        
+        return () => {
+            document.title = "App Dev Club People Portal"
+        }
+    }, [selectedApplication, teamInfo])
+
     // Load saved interview link on mount
     React.useEffect(() => {
         const saved = localStorage.getItem("interviewLink")
@@ -992,8 +1005,8 @@ export const DashboardTeamRecruitment = () => {
                             <p className="text-lg text-muted-foreground leading-0">Other Applications</p>
                             <div className="flex gap-2 max-w-full overflow-x-auto">
                                 {otherApplications.map((app) => (
-                                    <div key={app.id} className={`flex gap-6 p-3 rounded-md border text-sm ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
-                                        <div className="flex flex-col leading-[1]">
+                                    <div key={app.id} className={`flex gap-6 p-3 rounded-md border text-sm w-[200px] shrink-0 ${app.id === selectedApplication?.id ? 'bg-primary/10 border-primary' : 'bg-background hover:bg-muted/50'}`}>
+                                        <div className="flex flex-col leading-[1] min-w-0 flex-1">
                                             <p className="font-medium truncate">{app.teamName || 'Unknown Team'}</p>
                                             <p className="text-[10px] text-muted-foreground mt-1">Applied {new Date(app.appliedAt).toLocaleDateString()}</p>
                                         </div>

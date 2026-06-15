@@ -16,18 +16,18 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardFooter, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, AlertTriangleIcon, Loader2, RefreshCcw, Star } from 'lucide-react';
+import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, AlertTriangleIcon, Loader2, RefreshCcw, Star, Text, PenLine, Trash2Icon, EditIcon, SquarePen } from 'lucide-react';
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
-import { format, formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow, set } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogContentWide, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -148,6 +148,12 @@ export const DashboardPeopleInfo = () => {
     const [reviewTeams, setReviewTeams] = useState<TeamInformationBrief[]>([]);
     const [reviews, setReviews] = useState<ReviewData[]>([]);
     const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+
+    const [expandReviewDialogOpen, setExpandReviewDialogOpen] = useState(false);
+    const [selectedReview, setSelectedReview] = useState<ReviewData | null>(null);
+
+    const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
+    const [userInfoCache, setUserInfoCache] = useState<Map<number, UserInformationBrief>>(new Map());
  
     useEffect(() => {
         if (!userPk) return;
@@ -192,26 +198,41 @@ export const DashboardPeopleInfo = () => {
                 const commonTeams = await commonTeamsRes.json()
                 const reviewableTeams: TeamInformationBrief[] = [];
                 const existingReviews: ReviewData[] = [];
-                console.log(commonTeams);
-                for(const team of commonTeams.teams) {
-                    console.log(team);
-                    const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews/${team.pk}`, {
-                        credentials: 'include'
-                    });
-                    if (!res.ok) continue;
 
+                const results = await Promise.all(
+                    commonTeams.teams.map(async (team: TeamInformationBrief) => {
+                        const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews/${team.pk}`, {
+                            credentials: 'include'
+                        });
+                        if (!res.ok) return { team: null, review: null };
+                        const data = await res.json();
+                        return { team, review: data.review };
+                    })
+                );
+
+                for (const { team, review } of results) {
+                    if (team === null) continue;
                     reviewableTeams.push(team);
-                    const reviewData = await res.json();
-                    if (reviewData.review !== null) {
-                        existingReviews.push(reviewData.review);
-                    }
+                    if (review !== null) existingReviews.push(review);
                 }
-
                 setReviewTeams(reviewableTeams);
                 setReviews(existingReviews);
-            } catch (err) {
-                console.error(err);
-            } finally { }
+
+                // const queryString = new URLSearchParams({ limit: '12' }).toString();
+                // const allReviewsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews?${queryString}`, {
+                //     credentials: 'include'
+                // });
+
+                // if (!allReviewsRes.ok) throw new Error("Failed to fetch all reviews");
+
+                // const allReviewsData = await allReviewsRes.json();
+                // setAllReviews(allReviewsData.reviews);
+
+                
+
+            } catch (err) { } finally { } 
+            // If an error occured, its likely due to lacking permissions.
+            // Dont show error message as to keep reviews hidden from normal user.
         }
 
         fetchReviews();
@@ -253,22 +274,34 @@ export const DashboardPeopleInfo = () => {
     return (
         <>
             <ReviewUserDialog
-                    open={reviewDialogOpen}
-                    openChanged={(open, refresh) => {
-                        setReviewDialogOpen(open)
-                    }}
-                    reviewTeams={reviewTeams}
-                    reviews={reviews}
-                    setReviews={setReviews}
-                />
+                open={reviewDialogOpen}
+                openChanged={(open, refresh) => {
+                    setReviewDialogOpen(open)
+                }}
+                reviewTeams={reviewTeams}
+                reviews={reviews}
+                setReviews={setReviews}
+            />
+            <ExpandReviewDialog
+                open={expandReviewDialogOpen}
+                openChanged={(open, refresh) => {
+                    setExpandReviewDialogOpen(open);
+                    if (!open) setSelectedReview(null);
+                }}
+                review={selectedReview}
+                userCache={userInfoCache}
+                setUserCache={setUserInfoCache}
+                userTeamsMap={userTeamsMap}
+            />
+            
             <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
                 
                 {/* Left Column: User Profile Sidebar (Slim) */}
-                <div className="flex flex-col gap-6 md:w-[260px] shrink-0">
+                <div className="flex flex-col gap-6 lg:w-[260px] shrink-0">
                     <div className="md:sticky md:top-2 flex flex-col gap-5">
                         {/* Avatar & Basic Identity */}
                         <div className="flex flex-col items-center md:items-start text-center md:text-left gap-3">
-                            <Avatar className="h-48 w-48 md:h-64 md:w-64 ring-4 ring-background shadow-xl rounded-full bg-muted">
+                            <Avatar className="h-32 w-32 md:h-48 md:w-48 lg:h-64 lg:w-64 ring-4 ring-background shadow-xl rounded-full bg-muted">
                                 <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
                                 <AvatarFallback className="text-5xl text-muted-foreground">{initials}</AvatarFallback>
                             </Avatar>
@@ -418,45 +451,69 @@ export const DashboardPeopleInfo = () => {
                         <section>
                             <div className="flex items-center justify-between mb-3">
                                 <h2 className="text-base font-semibold flex items-center gap-2 text-muted-foreground">
-                                    <Briefcase className="h-4 w-4" />
+                                    <PenLine className="h-4 w-4" />
                                     Review User
                                 </h2>        
                             </div>
 
                             {reviews.length > 0 ?
-                                <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-                                    {reviews.map((review) => (
-                                        <Card key={review._id} className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {}}>
-                                            <CardContent className="p-4 flex flex-col gap-2">
-                                                <div className="flex items-start justify-between gap-2">
-                                                    <CardTitle className="text-sm font-medium text-foreground truncate" title={review.title}>
-                                                        {review.title}
-                                                    </CardTitle>
-                                                    <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
-                                                        <Star className="h-3 w-3" />
-                                                        {review.rating}
-                                                    </Badge>
-                                                </div>
+                                <div className="flex flex-col justify-center p-4 border border-dashed rounded-lg bg-muted/7 gap-4">
+                                    <h1 className='text-base font-bold tracking-tight'>Your Reviews</h1>
+                                    <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+                                        {reviews.map((review) => (
+                                            <Card key={review._id} className="!bg-card hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {
+                                                setSelectedReview(review);
+                                                setExpandReviewDialogOpen(true);
+                                            }}>
+                                                <CardContent className="p-4 !pb-2 h-full flex flex-col gap-2">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <CardTitle className="text-sm font-medium text-foreground truncate" title={review.title}>
+                                                            {review.title}
+                                                        </CardTitle>
+                                                        <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
+                                                            <Star className="h-3 w-3" />
+                                                            {review.rating}
+                                                        </Badge>
+                                                    </div>
 
-                                                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
-                                                    <Briefcase className="h-3 w-3" />
-                                                    {userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
-                                                </div>
+                                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
+                                                        <Briefcase className="h-3 w-3" />
+                                                        {userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
+                                                    </div>
 
-                                                {review?.content && (
-                                                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                                                        {review.content}
-                                                    </p>
-                                                )}
-
-                                                <div className="flex justify-end pt-2 border-t border-border mt-1">
-                                                    <span className="text-[10px] text-muted-foreground">
-                                                        {new Date(review.updatedAt).toLocaleString()}
-                                                    </span>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
+                                                    {review?.content && (
+                                                        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                                            {review.content}
+                                                        </p>
+                                                    )}
+                                                    <div className="flex justify-end pt-2 border-t border-border mt-auto">
+                                                        <span className="mr-auto">
+                                                            <Button
+                                                                onClick={(e) => { e.stopPropagation(); }}
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-5 mr-1 hover:text-green-600 hover:bg-green-50"
+                                                            >
+                                                                { <SquarePen size={12} /> }
+                                                            </Button>
+                                                            <Button
+                                                                onClick={(e) => { e.stopPropagation(); }}
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-6 w-6 hover:text-red-600 hover:bg-red-50"
+                                                            >
+                                                                { <Trash2Icon size={12} /> }
+                                                            </Button>
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {new Date(review.updatedAt).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                    <Button variant={"outline"} onClick={() => setReviewDialogOpen(true)}>Write a review</Button>
                                 </div>
                                 : <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5 gap-2">
                                     <p className="text-sm text-muted-foreground font-medium">You have not written an internal review for this user yet.</p>
@@ -526,14 +583,17 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
         }
     }
 
-    const reviewableTeams: TeamInformationBrief[] = props.reviewTeams.filter((team) => 
-        props.reviews.findIndex((r) => r.teamId === team.pk) === -1
+    const reviewableTeams = useMemo(() => 
+        props.reviewTeams.filter((team) => 
+            props.reviews.findIndex((r) => r.teamId === team.pk) === -1
+        ),
+        [props.reviewTeams, props.reviews]
     );
 
 
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContentWide>
                 <DialogHeader>
                     <DialogTitle>Write a Review</DialogTitle>
                     {/* <DialogDescription>
@@ -559,7 +619,7 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
-                                    <SelectLabel>Team Type</SelectLabel>
+                                    <SelectLabel>Team</SelectLabel>
                                     {reviewableTeams.map((team) => <SelectItem value={team.pk}>{team.friendlyName || team.name}</SelectItem>)}
                                 </SelectGroup>
                             </SelectContent>
@@ -600,7 +660,116 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
                         Submit Review
                     </Button>
                 </DialogFooter>
-            </DialogContent>
+            </DialogContentWide>
+        </Dialog>
+    )
+}
+
+
+interface ExpandReviewDialogProps {
+    open?: boolean;
+    openChanged(open: boolean, refresh?: boolean): void;
+    review: ReviewData | null;
+    userCache: Map<number, UserInformationBrief>;
+    setUserCache: (c: Map<number, UserInformationBrief>) => void;
+    userTeamsMap: Map<string, TeamInformationBrief>;
+}
+
+const ExpandReviewDialog = (props: ExpandReviewDialogProps) => {
+    const [isLoading, setIsLoading] = useState(false);
+    const [reviewer, setReviewer] = useState<UserInformationBrief>();
+    const review = props.review;
+
+    useEffect(() => {
+        if (!review) return;
+        setIsLoading(true);
+
+        const fetchUserData = async () => {
+            const userId = review.creatorId;
+            if (props.userCache.has(userId)) {
+                setReviewer(props.userCache.get(userId));
+                setIsLoading(false);
+                return;
+            }
+
+            try {
+                const userRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userId}`,{
+                    credentials: 'include'
+                });
+                if (!userRes.ok) throw new Error(userRes.statusText);
+                const userData: UserInformationDetail = await userRes.json();
+                setReviewer(userData);
+                props.setUserCache(new Map(props.userCache).set(userId, userData));
+            } catch (err) {
+                toast.error(`Failed to fetch user: ${err}`);
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        fetchUserData();
+    }, [review?.creatorId]);
+    
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.openChanged}>
+            <DialogContentWide className='sm:max-w-4xl'>
+                <DialogHeader>
+                    { reviewer !== undefined ?
+                        <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                                <AvatarImage src={reviewer.avatar} alt={reviewer.name} />
+                                <AvatarFallback className="text-sm">
+                                    {reviewer.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                                <DialogTitle className="text-sm font-semibold leading-tight">{reviewer.name}</DialogTitle>
+                                <a href={`#`} className="text-xs text-muted-foreground hover:text-primary hover:underline transition-colors" onClick={(e) => {
+                                    e.preventDefault();
+                                    try {
+                                        navigator.clipboard.writeText(reviewer.email)
+                                        toast.success("Email copied to clipboard.")
+                                    } catch (e) {
+                                        toast.error("Failed to copy email.")
+                                    }
+                                }}>
+                                    {reviewer.email}
+                                </a>
+                            </div>
+                        </div> : 
+                        <Skeleton className="h-12 w-full" />
+                    }
+                </DialogHeader>
+
+                { review !== null &&
+                    <div className="flex flex-col gap-4 py-2">
+                        <div className="flex items-start justify-between gap-2">
+                            <h3 className="text-base font-semibold text-foreground leading-tight">{review.title}</h3>
+                            <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
+                                <Star className="h-3 w-3" />
+                                {review.rating}
+                            </Badge>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
+                            <Briefcase className="h-3 w-3" />
+                            {props.userTeamsMap.get(review.teamId)?.friendlyName ?? props.userTeamsMap.get(review.teamId)?.name}
+                        </div>
+
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            {review.content}
+                        </p>
+
+                        <div className="flex justify-end border-t pt-3 mt-1">
+                            <span className="text-[11px] text-muted-foreground">
+                                {new Date(review.updatedAt).toLocaleString()}
+                            </span>
+                        </div>
+                    </div>
+                }
+            </DialogContentWide>
         </Dialog>
     )
 }

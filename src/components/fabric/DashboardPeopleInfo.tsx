@@ -18,14 +18,21 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users } from 'lucide-react';
+import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, AlertTriangleIcon, Loader2, RefreshCcw, Star } from 'lucide-react';
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { Button } from '../ui/button';
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Label } from '../ui/label';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../ui/select';
+import { toast } from 'sonner';
 
 // --- Interfaces matching the Backend ---
 
@@ -100,6 +107,18 @@ interface TeamInformationBrief {
     peoplePortalCreation: boolean;
 }
 
+interface ReviewData { 
+  _id: string;
+  userId: number;
+  creatorId: number;
+  teamId: string;
+  rating: number;
+  title: string;
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Reusable Info Card Component
 const InfoItem = ({ icon: Icon, label, value, href, className }: { icon: React.ElementType, label: string, value: string | React.ReactNode, href?: string, className?: string }) => (
     <div className={cn("flex flex-col gap-1 p-3 rounded-lg border bg-card text-card-foreground shadow-sm", className)}>
@@ -126,6 +145,10 @@ export const DashboardPeopleInfo = () => {
     const [userTeamsMap, setUserTeamsMap] = useState<Map<string, TeamInformationBrief>>(new Map());
     const [loading, setLoading] = useState(true);
 
+    const [reviewTeams, setReviewTeams] = useState<TeamInformationBrief[]>([]);
+    const [reviews, setReviews] = useState<ReviewData[]>([]);
+    const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+ 
     useEffect(() => {
         if (!userPk) return;
 
@@ -158,6 +181,40 @@ export const DashboardPeopleInfo = () => {
         };
 
         fetchData();
+
+        const fetchReviews = async () => {
+            try {
+                const commonTeamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/commonteams`, {
+                    credentials: 'include'
+                });
+                if (!commonTeamsRes.ok) throw Error("Failed to fetch common teams");
+                
+                const commonTeams = await commonTeamsRes.json()
+                const reviewableTeams: TeamInformationBrief[] = [];
+                const existingReviews: ReviewData[] = [];
+                console.log(commonTeams);
+                for(const team of commonTeams.teams) {
+                    console.log(team);
+                    const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews/${team.pk}`, {
+                        credentials: 'include'
+                    });
+                    if (!res.ok) continue;
+
+                    reviewableTeams.push(team);
+                    const reviewData = await res.json();
+                    if (reviewData.review !== null) {
+                        existingReviews.push(reviewData.review);
+                    }
+                }
+
+                setReviewTeams(reviewableTeams);
+                setReviews(existingReviews);
+            } catch (err) {
+                console.error(err);
+            } finally { }
+        }
+
+        fetchReviews();
     }, [userPk]);
 
     if (loading) {
@@ -194,158 +251,356 @@ export const DashboardPeopleInfo = () => {
         .filter(entry => entry.teamInfo !== undefined);
 
     return (
-        <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
-            {/* Left Column: User Profile Sidebar (Slim) */}
-            <div className="flex flex-col gap-6 md:w-[260px] shrink-0">
-                <div className="md:sticky md:top-2 flex flex-col gap-5">
-                    {/* Avatar & Basic Identity */}
-                    <div className="flex flex-col items-center md:items-start text-center md:text-left gap-3">
-                        <Avatar className="h-48 w-48 md:h-64 md:w-64 ring-4 ring-background shadow-xl rounded-full bg-muted">
-                            <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
-                            <AvatarFallback className="text-5xl text-muted-foreground">{initials}</AvatarFallback>
-                        </Avatar>
+        <>
+            <ReviewUserDialog
+                    open={reviewDialogOpen}
+                    openChanged={(open, refresh) => {
+                        setReviewDialogOpen(open)
+                    }}
+                    reviewTeams={reviewTeams}
+                    reviews={reviews}
+                    setReviews={setReviews}
+                />
+            <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
+                
+                {/* Left Column: User Profile Sidebar (Slim) */}
+                <div className="flex flex-col gap-6 md:w-[260px] shrink-0">
+                    <div className="md:sticky md:top-2 flex flex-col gap-5">
+                        {/* Avatar & Basic Identity */}
+                        <div className="flex flex-col items-center md:items-start text-center md:text-left gap-3">
+                            <Avatar className="h-48 w-48 md:h-64 md:w-64 ring-4 ring-background shadow-xl rounded-full bg-muted">
+                                <AvatarImage src={user.avatar} alt={user.name} className="object-cover" />
+                                <AvatarFallback className="text-5xl text-muted-foreground">{initials}</AvatarFallback>
+                            </Avatar>
 
-                        <div className="space-y-0.5 mt-2 w-full">
-                            <h1 className="text-2xl font-bold tracking-tight text-foreground break-words leading-tight">{user.name}</h1>
-                            <p className="text-base text-muted-foreground font-mono break-all">{user.username}</p>
-                        </div>
+                            <div className="space-y-0.5 mt-2 w-full">
+                                <h1 className="text-2xl font-bold tracking-tight text-foreground break-words leading-tight">{user.name}</h1>
+                                <p className="text-base text-muted-foreground font-mono break-all">{user.username}</p>
+                            </div>
 
-                        <div className="flex flex-wrap justify-center md:justify-start gap-1.5 mt-1">
-                            <Badge variant={user.active ? "default" : "destructive"} className={cn("px-2 py-0.5 text-xs", user.active ? "bg-emerald-600 hover:bg-emerald-700" : "")}>
-                                {user.active ? "Active" : "Inactive"}
-                            </Badge>
-                            {user.is_superuser && (
-                                <Badge variant="secondary" className="gap-1 text-xs border-purple-500/30 text-purple-600 bg-purple-500/10 hover:bg-purple-500/20">
-                                    <ShieldCheck className="h-3 w-3" />
-                                    Admin
+                            <div className="flex flex-wrap justify-center md:justify-start gap-1.5 mt-1">
+                                <Badge variant={user.active ? "default" : "destructive"} className={cn("px-2 py-0.5 text-xs", user.active ? "bg-emerald-600 hover:bg-emerald-700" : "")}>
+                                    {user.active ? "Active" : "Inactive"}
                                 </Badge>
-                            )}
-                            {attributes?.alumniAccount && (
-                                <Badge variant="secondary" className="gap-1 text-xs border-amber-500/30 text-amber-600 bg-amber-500/10 hover:bg-amber-500/20">
-                                    <GraduationCap className="h-3 w-3" />
-                                    Alumni
-                                </Badge>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Contact Info Only - GitHub Style */}
-                    <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
-                        <div className="flex items-center gap-2">
-                            <Mail className="h-4 w-4 shrink-0" />
-                            <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
-                                {user.email}
-                            </a>
+                                {user.is_superuser && (
+                                    <Badge variant="secondary" className="gap-1 text-xs border-purple-500/30 text-purple-600 bg-purple-500/10 hover:bg-purple-500/20">
+                                        <ShieldCheck className="h-3 w-3" />
+                                        Admin
+                                    </Badge>
+                                )}
+                                {attributes?.alumniAccount && (
+                                    <Badge variant="secondary" className="gap-1 text-xs border-amber-500/30 text-amber-600 bg-amber-500/10 hover:bg-amber-500/20">
+                                        <GraduationCap className="h-3 w-3" />
+                                        Alumni
+                                    </Badge>
+                                )}
+                            </div>
                         </div>
 
-                        {attributes?.phoneNumber && (
+                        {/* Contact Info Only - GitHub Style */}
+                        <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
                             <div className="flex items-center gap-2">
-                                <Phone className="h-4 w-4 shrink-0" />
-                                <a href={`tel:${attributes.phoneNumber}`} className="hover:text-primary hover:underline truncate transition-colors" title={attributes.phoneNumber}>
-                                    {attributes.phoneNumber}
+                                <Mail className="h-4 w-4 shrink-0" />
+                                <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
+                                    {user.email}
                                 </a>
                             </div>
-                        )}
+
+                            {attributes?.phoneNumber && (
+                                <div className="flex items-center gap-2">
+                                    <Phone className="h-4 w-4 shrink-0" />
+                                    <a href={`tel:${attributes.phoneNumber}`} className="hover:text-primary hover:underline truncate transition-colors" title={attributes.phoneNumber}>
+                                        {attributes.phoneNumber}
+                                    </a>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Right Column: Main Content */}
-            <div className="flex-1 min-w-0 space-y-6">
+                {/* Right Column: Main Content */}
+                <div className="flex-1 min-w-0 space-y-6">
 
-                {/* Section 1: Personal Details Grid */}
-                <section>
-                    <h2 className="text-base font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                        Personal Details
-                    </h2>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                        {attributes?.major && (
-                            <InfoItem icon={GraduationCap} label="Major" value={attributes.major} />
-                        )}
-                        {attributes?.expectedGrad && (
-                            <InfoItem icon={Calendar} label="Class of" value={format(new Date(attributes.expectedGrad), 'yyyy')} />
-                        )}
-                        {user.memberSince && (
-                            <InfoItem icon={MapPin} label="Joined" value={format(new Date(user.memberSince), 'MMM yyyy')} />
-                        )}
-                        {user.last_login && (
-                            <InfoItem icon={Clock} label="Last Seen" value={formatDistanceToNow(new Date(user.last_login)) + " ago"} />
-                        )}
-                        {user.type && user.type !== 'internal' && (
-                            <InfoItem icon={Tag} label="Account Type" value={<span className="capitalize">{user.type}</span>} />
-                        )}
-                    </div>
-                </section>
-
-                <section>
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-base font-semibold flex items-center gap-2 text-muted-foreground">
-                            <Briefcase className="h-4 w-4" />
-                            Team Memberships
+                    {/* Section 1: Personal Details Grid */}
+                    <section>
+                        <h2 className="text-base font-semibold mb-3 flex items-center gap-2 text-muted-foreground">
+                            <Users className="h-4 w-4" />
+                            Personal Details
                         </h2>
-                        <Badge variant="outline" className="text-muted-foreground text-xs">
-                            {roleEntries.length} Total
-                        </Badge>
-                    </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                            {attributes?.major && (
+                                <InfoItem icon={GraduationCap} label="Major" value={attributes.major} />
+                            )}
+                            {attributes?.expectedGrad && (
+                                <InfoItem icon={Calendar} label="Class of" value={format(new Date(attributes.expectedGrad), 'yyyy')} />
+                            )}
+                            {user.memberSince && (
+                                <InfoItem icon={MapPin} label="Joined" value={format(new Date(user.memberSince), 'MMM yyyy')} />
+                            )}
+                            {user.last_login && (
+                                <InfoItem icon={Clock} label="Last Seen" value={formatDistanceToNow(new Date(user.last_login)) + " ago"} />
+                            )}
+                            {user.type && user.type !== 'internal' && (
+                                <InfoItem icon={Tag} label="Account Type" value={<span className="capitalize">{user.type}</span>} />
+                            )}
+                        </div>
+                    </section>
 
-                    {roleEntries.length > 0 ? (
-                        <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
-                            {roleEntries.map(({ teamPk, roleTitle, teamInfo }) => (
-                                <Card
-                                    key={teamPk}
-                                    className="hover:border-primary/50 transition-colors cursor-pointer"
-                                    onClick={() => navigate(`/org/teams/${teamPk}`)}
-                                >
-                                    <CardContent className="p-3">
-                                        <div className="flex flex-col gap-1.5">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
-                                                    {teamInfo?.friendlyName || "Unknown Team"}
-                                                </CardTitle>
-                                                {teamInfo?.teamType && (
-                                                    <Badge variant="secondary" className="text-[9px] h-4 px-1 rounded font-normal text-muted-foreground shrink-0">
-                                                        {teamInfo.teamType}
-                                                    </Badge>
-                                                )}
-                                            </div>
-                                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-500">
-                                                <Briefcase className="h-3 w-3" />
-                                                {roleTitle}
-                                            </div>
+                    <section>
+                        <div className="flex items-center justify-between mb-3">
+                            <h2 className="text-base font-semibold flex items-center gap-2 text-muted-foreground">
+                                <Briefcase className="h-4 w-4" />
+                                Team Memberships
+                            </h2>
+                            <Badge variant="outline" className="text-muted-foreground text-xs">
+                                {roleEntries.length} Total
+                            </Badge>
+                        </div>
 
-                                            {teamInfo?.description && (
-                                                <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5" title={teamInfo.description}>
-                                                    {teamInfo.description}
-                                                </p>
-                                            )}
-
-                                            <div className="flex items-center justify-between pt-1.5 border-t text-[10px] text-muted-foreground mt-1">
-                                                <div className="flex items-center gap-1">
-                                                    {(teamInfo?.seasonType || teamInfo?.seasonYear) ? (
-                                                        <>
-                                                            <Calendar className="h-2.5 w-2.5 opacity-70" />
-                                                            <span>{teamInfo.seasonType} {teamInfo.seasonYear}</span>
-                                                        </>
-                                                    ) : (
-                                                        <span>Ongoing</span>
+                        {roleEntries.length > 0 ? (
+                            <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+                                {roleEntries.map(({ teamPk, roleTitle, teamInfo }) => (
+                                    <Card
+                                        key={teamPk}
+                                        className="hover:border-primary/50 transition-colors cursor-pointer"
+                                        onClick={() => navigate(`/org/teams/${teamPk}`)}
+                                    >
+                                        <CardContent className="p-3">
+                                            <div className="flex flex-col gap-1.5">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
+                                                        {teamInfo?.friendlyName || "Unknown Team"}
+                                                    </CardTitle>
+                                                    {teamInfo?.teamType && (
+                                                        <Badge variant="secondary" className="text-[9px] h-4 px-1 rounded font-normal text-muted-foreground shrink-0">
+                                                            {teamInfo.teamType}
+                                                        </Badge>
                                                     )}
                                                 </div>
-                                                <span className="font-mono opacity-50">{teamPk.substring(0, 6)}</span>
+                                                <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-500">
+                                                    <Briefcase className="h-3 w-3" />
+                                                    {roleTitle}
+                                                </div>
+
+                                                {teamInfo?.description && (
+                                                    <p className="text-[11px] text-muted-foreground line-clamp-1 mt-0.5" title={teamInfo.description}>
+                                                        {teamInfo.description}
+                                                    </p>
+                                                )}
+
+                                                <div className="flex items-center justify-between pt-1.5 border-t text-[10px] text-muted-foreground mt-1">
+                                                    <div className="flex items-center gap-1">
+                                                        {(teamInfo?.seasonType || teamInfo?.seasonYear) ? (
+                                                            <>
+                                                                <Calendar className="h-2.5 w-2.5 opacity-70" />
+                                                                <span>{teamInfo.seasonType} {teamInfo.seasonYear}</span>
+                                                            </>
+                                                        ) : (
+                                                            <span>Ongoing</span>
+                                                        )}
+                                                    </div>
+                                                    <span className="font-mono opacity-50">{teamPk.substring(0, 6)}</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5">
-                            <AlertCircle className="h-8 w-8 text-muted-foreground/50 mb-2" />
-                            <p className="text-sm text-muted-foreground font-medium">No team memberships found.</p>
-                        </div>
-                    )}
-                </section>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5">
+                                <AlertCircle className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                                <p className="text-sm text-muted-foreground font-medium">No team memberships found.</p>
+                            </div>
+                        )}
+                    </section>
+
+                    {reviewTeams.length !== 0 &&
+                        <section>
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-base font-semibold flex items-center gap-2 text-muted-foreground">
+                                    <Briefcase className="h-4 w-4" />
+                                    Review User
+                                </h2>        
+                            </div>
+
+                            {reviews.length > 0 ?
+                                <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+                                    {reviews.map((review) => (
+                                        <Card key={review._id} className="hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {}}>
+                                            <CardContent className="p-4 flex flex-col gap-2">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <CardTitle className="text-sm font-medium text-foreground truncate" title={review.title}>
+                                                        {review.title}
+                                                    </CardTitle>
+                                                    <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
+                                                        <Star className="h-3 w-3" />
+                                                        {review.rating}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
+                                                    <Briefcase className="h-3 w-3" />
+                                                    {userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
+                                                </div>
+
+                                                {review?.content && (
+                                                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                                                        {review.content}
+                                                    </p>
+                                                )}
+
+                                                <div className="flex justify-end pt-2 border-t border-border mt-1">
+                                                    <span className="text-[10px] text-muted-foreground">
+                                                        {new Date(review.updatedAt).toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                                : <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5 gap-2">
+                                    <p className="text-sm text-muted-foreground font-medium">You have not written an internal review for this user yet.</p>
+                                    <Button variant={"outline"} onClick={() => setReviewDialogOpen(true)}>Write a review</Button>
+                                </div>
+                            }
+                        </section>
+                    }
+                </div>
             </div>
-        </div>
+        </>
     );
 };
+
+interface ReviewUserDialogProps {
+    open?: boolean;
+    openChanged(open: boolean, refresh?: boolean): void;
+    reviewTeams: TeamInformationBrief[];
+    reviews: ReviewData[];
+    setReviews: (r: ReviewData[]) => void;
+}
+
+const ReviewUserDialog = (props: ReviewUserDialogProps) => {
+    const { userPk } = useParams<{ userPk: string }>();
+    const reviewURL = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews`;
+
+    const [teamId, setTeamId] = useState<string>('');
+    const [teamName, setTeamName] = useState<string>('None Selected');
+    const [rating, setRating] = useState<number>(5);
+    const [title, setTitle] = useState<string>('');
+    const [content, setContent] = useState<string>('');
+
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
+    const handleFormSubmit = async () => {
+        setIsLoading(true);
+
+        const payload = {
+            teamId: teamId,
+            rating: rating,
+            title: title,
+            content: content
+        };
+
+        try {
+            const res = await fetch(reviewURL, {
+                credentials: 'include',
+                method: 'POST',
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) throw new Error((await res.text()));
+
+            const resData = await res.json();
+
+            props.setReviews([...props.reviews, resData.review]);
+            toast.success("Review Submitted");
+            props.openChanged(false);
+
+        } catch (err: any) {
+            toast.error(err.message);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    const reviewableTeams: TeamInformationBrief[] = props.reviewTeams.filter((team) => 
+        props.reviews.findIndex((r) => r.teamId === team.pk) === -1
+    );
+
+
+    return (
+        <Dialog open={props.open} onOpenChange={props.openChanged}>
+            <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>Write a Review</DialogTitle>
+                    {/* <DialogDescription>
+                        Leaving a review will help us understand 
+                    </DialogDescription> */}
+                </DialogHeader>
+                <div className="grid gap-4">
+
+                    <div className="grid gap-3">
+                        <Label>Team</Label>
+                        <Select required value={teamId} onValueChange={(val) => { 
+                            const idx = reviewableTeams.findIndex((t) => t.pk === val);
+                            if (idx === -1) {
+                                setTeamName("None Selected");
+                                setTeamId('3');
+                                return;
+                            }
+                            setTeamName(reviewableTeams[idx].friendlyName || reviewableTeams[idx].name);
+                            setTeamId(val);
+                        }}>
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select Team" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectLabel>Team Type</SelectLabel>
+                                    {reviewableTeams.map((team) => <SelectItem value={team.pk}>{team.friendlyName || team.name}</SelectItem>)}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                        {teamId !== '' &&
+                            <>
+                            <div className="grid gap-3">
+                                <Label htmlFor="name-1">Rating</Label>
+                                <Input type="number" min={1} max={5} step={0.1} required value={rating} onChange={(e) => setRating(Number(e.target.value))} />
+                            </div>
+                            <div className="grid gap-3">
+                                <Label htmlFor="name-1">Title</Label>
+                                <Input maxLength={150} required value={title} onChange={(e) => setTitle(e.target.value)} />
+                            </div>
+                            <div className="grid gap-3">
+                                <Label htmlFor="name-1">Review Content</Label>
+                                <Textarea minLength={50} maxLength={2000} required value={content} onChange={(e) => setContent(e.target.value)} />
+                            </div>
+                            </>
+
+                        }
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button
+                        onClick={handleFormSubmit}
+                        disabled={isLoading || 
+                            teamId === '' ||
+                            !(title && title.length <= 150) || 
+                            !(content.length >= 50 && content.length <= 2000) || 
+                            !(rating >= 1 && rating <= 5 && Number.isInteger(rating * 10))
+                        }
+                    >
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Submit Review
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}

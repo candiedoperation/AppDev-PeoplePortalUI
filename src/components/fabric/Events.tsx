@@ -120,7 +120,7 @@ const EventCard = ({ event, onEdit }: { event: EventDoc; onEdit?: (e: EventDoc) 
                         </CardDescription>
                     </div>
                     <Badge variant={event.scope === "public" ? "default" : "secondary"} className="shrink-0">
-                        {event.scope === "exec" ? "Executive" : event.scope.charAt(0).toUpperCase() + event.scope.slice(1)}
+                        {event.scope === "exec" ? "Executive" : event.scope ? event.scope.charAt(0).toUpperCase() + event.scope.slice(1) : "Internal"}
                     </Badge>
                 </div>
             </CardHeader>

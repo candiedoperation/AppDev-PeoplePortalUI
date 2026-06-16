@@ -467,6 +467,23 @@ const AddTeamMembersDialog = (props: { teamPk?: string, subteams: TeamInfo[], op
     ])
 
     const handleMemberAdd = async () => {
+        if (currentTab == "invite") {
+            const trimmedName = inviteeName.trim();
+            const allowed = /^[A-Za-z .'-]+$/;
+            const nameParts = trimmedName.split(/\s+/).filter(p => /[A-Za-z]/.test(p));
+            if (trimmedName.length < 2 || trimmedName.length > 60) {
+                toast.error("Name must be between 2 and 60 characters.");
+                return;
+            }
+            if (!allowed.test(trimmedName)) {
+                toast.error("Invalid name. Use only letters, spaces, apostrophes, periods, and hyphens.");
+                return;
+            }
+            if (nameParts.length < 2) {
+                toast.error("Please enter both a first and last name before sending an invite.");
+                return;
+            }
+        }
         if (currentTab == "existing") {
             if (!selectedSubTeam || !selectedExistingMember)
                 return

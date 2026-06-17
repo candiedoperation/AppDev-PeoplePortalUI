@@ -16,15 +16,15 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardFooter, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, AlertTriangleIcon, Loader2, RefreshCcw, Star, Text, PenLine, Trash2Icon, EditIcon, SquarePen } from 'lucide-react';
+import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, Loader2, Star, PenLine, Trash2Icon, SquarePen, ChevronRight, ChevronDown } from 'lucide-react';
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
-import { format, formatDistanceToNow, set } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '../ui/button';
 import { Dialog, DialogClose, DialogContent, DialogContentWide, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -155,9 +155,21 @@ export const DashboardPeopleInfo = () => {
 
     const [deleteReviewDialogOpen, setDeleteReviewDialogOpen] = useState(false);
 
+    const [isExec, setIsExec] = useState(false);
+    const [totalReviews, setTotalReviews] = useState(0);
+    const [avgRating, setAvgRating] = useState(0);
+    const [allReviewsOpen, setAllReviewsOpen] = useState(false);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
     const [allReviews, setAllReviews] = useState<ReviewData[]>([]);
     const [userInfoCache, setUserInfoCache] = useState<Map<number, UserInformationBrief>>(new Map());
  
+
+    const allReviewsLengthRef = useRef(0);
+    useEffect(() => { allReviewsLengthRef.current = allReviews.length; }, [allReviews]);
+
+    const userInfoCacheRef = useRef(userInfoCache);
+    useEffect(() => { userInfoCacheRef.current = userInfoCache; }, [userInfoCache]);
+
     useEffect(() => {
         if (!userPk) return;
 
@@ -191,8 +203,15 @@ export const DashboardPeopleInfo = () => {
 
         fetchData();
 
-        const fetchReviews = async () => {
+        const fetchUserReviews = async () => {
             try {
+                setAllReviews([]);
+                setAllReviewsOpen(false);
+                setTotalReviews(0);
+                setAvgRating(0);
+
+                setReviews([]);
+
                 const commonTeamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/commonteams`, {
                     credentials: 'include'
                 });
@@ -201,6 +220,8 @@ export const DashboardPeopleInfo = () => {
                 const commonTeams = await commonTeamsRes.json()
                 const reviewableTeams: TeamInformationBrief[] = [];
                 const existingReviews: ReviewData[] = [];
+
+                
 
                 const results = await Promise.all(
                     commonTeams.teams.map(async (team: TeamInformationBrief) => {
@@ -221,25 +242,128 @@ export const DashboardPeopleInfo = () => {
                 setReviewTeams(reviewableTeams);
                 setReviews(existingReviews);
 
-                // const queryString = new URLSearchParams({ limit: '12' }).toString();
-                // const allReviewsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews?${queryString}`, {
-                //     credentials: 'include'
-                // });
+                // Don't fetch any actual data. Just check if user is authorized to get this data.
+                const queryString = new URLSearchParams({ limit: '0', getAggregateData: 'true' }).toString();
+                const allReviewsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews?${queryString}`, {
+                    credentials: 'include'
+                });
 
-                // if (!allReviewsRes.ok) throw new Error("Failed to fetch all reviews");
+                // If true, unauthorized.
+                if (!allReviewsRes.ok) {
+                    setIsExec(false);
+                    return;
+                }
 
-                // const allReviewsData = await allReviewsRes.json();
-                // setAllReviews(allReviewsData.reviews);
-
+                setIsExec(true);
                 
-
+                const allReviewsData = await allReviewsRes.json();
+                setTotalReviews(allReviewsData.aggregateData.totalReviews ?? 0);
+                setAvgRating(allReviewsData.aggregateData.averageRating ?? 0);
             } catch (err) { } finally { } 
             // If an error occured, its likely due to lacking permissions.
             // Dont show error message as to keep reviews hidden from normal user.
         }
 
-        fetchReviews();
+        fetchUserReviews();
     }, [userPk]);
+
+    const fetchReviews = useCallback(async () => {
+        try {
+            setReviewsLoading(true);
+
+            const queryString = new URLSearchParams({ limit: '12', offset: allReviewsLengthRef.current.toString(), getAggregateData: 'false' }).toString();
+            const allReviewsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews?${queryString}`, {
+                credentials: 'include'
+            });
+
+            if (!allReviewsRes.ok) {
+                throw new Error(`Failed to fetch reviews: ${allReviewsRes.statusText}`);
+            }
+
+            const allReviewsData = await allReviewsRes.json();
+            const uniqueCreatorIds: number[] = [...new Set<number>(allReviewsData.reviews.map((r: ReviewData) => r.creatorId))];
+
+            const reviewers = await Promise.all(uniqueCreatorIds.map(async (creatorId) => {
+                if (userInfoCacheRef.current.has(creatorId)) return null;
+                const userRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${creatorId}`,{
+                    credentials: 'include'
+                });
+                if (!userRes.ok) {
+                    toast.error(`Failed to load user information for user ${creatorId}`);
+                };
+                const userData: UserInformationDetail = await userRes.json();
+                return [creatorId, userData];
+            }));
+
+            setUserInfoCache(prev => {
+                const newUserInfoCache = new Map(prev);
+                reviewers.forEach(entry => {
+                    if (entry) newUserInfoCache.set(entry[0] as number, entry[1] as UserInformationDetail);
+                });
+                return newUserInfoCache;
+            })
+            setAllReviews(prev => [...prev, ...allReviewsData.reviews]);
+        } catch (e: any) {
+            toast.error(e.message);
+        } finally {
+            setReviewsLoading(false);
+        }
+    }, [userPk]);
+
+    useEffect(() => {
+        if (!allReviewsOpen || !isExec || totalReviews === 0 || allReviewsLengthRef.current > 0) return;
+        fetchReviews();
+    }, [allReviewsOpen, isExec, totalReviews, allReviewsLengthRef.current]);
+
+    const handleAddReview = useCallback((review: ReviewData) => {
+        if (isExec) {
+            setAllReviews(prev => [review, ...prev]);
+            setAvgRating(prev => (prev * totalReviews + review.rating) / (totalReviews + 1));
+            setTotalReviews(prev => prev + 1);
+        }
+        setReviews(prev => [review, ...prev]);
+    }, [isExec, totalReviews]);
+
+    const handleEditReview = useCallback((review: ReviewData) => {
+        if (isExec) {
+            setAllReviews(prev => {
+                const idx = prev.findIndex(r => r._id === review._id);
+                if (idx === -1) return prev;
+
+                setAvgRating(avg => avg + (review.rating - prev[idx].rating) / totalReviews);
+                return [review, ...prev.filter((_, i) => i !== idx)];
+            });
+        }
+        setReviews(prev => [review, ...prev.filter(r => r._id !== review._id)]);
+    }, [isExec, totalReviews]);
+
+    const handleDeleteReview = useCallback((review: ReviewData) => {
+        if (isExec) {
+            setAllReviews(prev => prev.filter(r => r._id !== review._id));
+            if (totalReviews == 1) {
+                setAvgRating(0);
+            } else {
+                setAvgRating(prev => (prev * totalReviews - review.rating) / (totalReviews - 1));
+            }
+            setTotalReviews(prev => prev - 1);
+        }
+        setReviews(prev => prev.filter(r => r._id !== review._id));
+    }, [isExec, totalReviews]);
+
+    const handleExpandOpen = useCallback((review: ReviewData) => {
+        setSelectedReview(review);
+        setExpandReviewDialogOpen(true);
+    }, []);
+
+    const handleEditOpen = useCallback((review: ReviewData) => {
+        setSelectedReview(review);
+        setReviewDialogOpen(true);
+    }, []);
+
+    const handleDeleteOpen = useCallback((review: ReviewData) => {
+        setSelectedReview(review);
+        setDeleteReviewDialogOpen(true);
+    }, []);
 
     if (loading) {
         return (
@@ -284,7 +408,8 @@ export const DashboardPeopleInfo = () => {
                 }}
                 reviewTeams={reviewTeams}
                 reviews={reviews}
-                setReviews={setReviews}
+                handleAddReview={handleAddReview}
+                handleEditReview={handleEditReview}
                 editReview={selectedReview ?? undefined}
             />
             <ExpandReviewDialog
@@ -305,8 +430,7 @@ export const DashboardPeopleInfo = () => {
                     if (!open) setSelectedReview(null);
                 }}
                 review={selectedReview}
-                reviews={reviews}
-                setReviews={setReviews}
+                handleDeleteReview={handleDeleteReview}
             />
             <div className="flex flex-col md:flex-row gap-8 p-6 h-full overflow-y-auto">
                 
@@ -366,7 +490,7 @@ export const DashboardPeopleInfo = () => {
                 </div>
 
                 {/* Right Column: Main Content */}
-                <div className="flex-1 min-w-0 space-y-6">
+                <div className="flex-1 min-w-0 space-y-6 overflow-y-auto scrollbar-hidden">
 
                     {/* Section 1: Personal Details Grid */}
                     <section>
@@ -475,56 +599,14 @@ export const DashboardPeopleInfo = () => {
                                     <h1 className='text-base font-bold tracking-tight'>Your Reviews</h1>
                                     <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
                                         {reviews.map((review) => (
-                                            <Card key={review._id} className="!bg-card hover:border-primary/50 transition-colors cursor-pointer" onClick={() => {
-                                                setSelectedReview(review);
-                                                setExpandReviewDialogOpen(true);
-                                            }}>
-                                                <CardContent className="p-4 !pb-2 h-full flex flex-col gap-2">
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <CardTitle className="text-sm font-medium text-foreground truncate" title={review.title}>
-                                                            {review.title}
-                                                        </CardTitle>
-                                                        <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
-                                                            <Star className="h-3 w-3" />
-                                                            {review.rating}
-                                                        </Badge>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
-                                                        <Briefcase className="h-3 w-3" />
-                                                        {userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
-                                                    </div>
-
-                                                    {review?.content && (
-                                                        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
-                                                            {review.content}
-                                                        </p>
-                                                    )}
-                                                    <div className="flex justify-end pt-2 border-t border-border mt-auto">
-                                                        <span className="mr-auto">
-                                                            <Button
-                                                                onClick={(e) => { e.stopPropagation(); setSelectedReview(review); setReviewDialogOpen(true); }}
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-5 mr-1 hover:text-green-600 hover:bg-green-50"
-                                                            >
-                                                                { <SquarePen size={12} /> }
-                                                            </Button>
-                                                            <Button
-                                                                onClick={(e) => { e.stopPropagation(); setSelectedReview(review); setDeleteReviewDialogOpen(true); }}
-                                                                variant="ghost"
-                                                                size="icon"
-                                                                className="h-6 w-6 hover:text-red-600 hover:bg-red-50"
-                                                            >
-                                                                { <Trash2Icon size={12} /> }
-                                                            </Button>
-                                                        </span>
-                                                        <span className="text-[10px] text-muted-foreground">
-                                                            {new Date(review.updatedAt).toLocaleString()}
-                                                        </span>
-                                                    </div>
-                                                </CardContent>
-                                            </Card>
+                                            <ReviewCard 
+                                                key={review._id}
+                                                review={review}
+                                                teamName={userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
+                                                onExpand={handleExpandOpen}
+                                                onEdit={handleEditOpen}
+                                                onDelete={handleDeleteOpen}
+                                            />
                                         ))}
                                     </div>
                                     <Button variant={"outline"} onClick={() => { setSelectedReview(null); setReviewDialogOpen(true); }}>Write a new review</Button>
@@ -536,18 +618,154 @@ export const DashboardPeopleInfo = () => {
                             }
                         </section>
                     }
+
+                    {isExec &&
+                        <section>
+                            <div className="flex items-center justify-between mb-3">
+                                <h2 className="text-base font-semibold flex items-center gap-2 text-muted-foreground">
+                                    <Star className="h-4 w-4" />
+                                    All Reviews
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { setAllReviewsOpen(!allReviewsOpen) }}>
+                                        {allReviewsOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                                    </Button>
+                                </h2>
+                                <div className="flex items-end justify-between gap-6">
+                                    <Badge
+                                        variant={avgRating === 0 ? "outline" : "secondary"}
+                                        className={cn("flex items-center gap-1 text-xs shrink-0", avgRating === 0 ? "text-muted-foreground" : '')}
+                                        style={avgRating === 0 ? undefined : {
+                                            color: `rgb(${Math.round(230 * (1 - (avgRating - 1) / 4))}, ${Math.round(230 * ((avgRating - 1) / 4))}, 20)`,
+                                            backgroundColor: `rgb(${Math.round(255 * (1 - (avgRating - 1) / 4))}, ${Math.round(255 * ((avgRating - 1) / 4))}, 20, 0.1)`,
+                                        }}
+                                    >
+                                        <Star className="h-3 w-3" />
+                                        Average rating: {avgRating.toFixed(1)}
+                                    </Badge>
+                                    <Badge variant="outline" className="text-muted-foreground text-xs">
+                                        {totalReviews} Total
+                                    </Badge>
+                                </div>
+                                
+                            </div>
+                            {allReviewsOpen && (totalReviews > 0 ? 
+                                <div className="flex flex-col justify-center p-4 border border-dashed rounded-lg bg-muted/7 gap-4">
+                                    <div className="grid gap-2.5 grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
+                                        {allReviews.map((review) => (
+                                            <ReviewCard 
+                                                key={review._id}
+                                                review={review}
+                                                teamName={userTeamsMap.get(review.teamId)?.friendlyName ?? userTeamsMap.get(review.teamId)?.name}
+                                                onExpand={handleExpandOpen}
+                                                onEdit={handleEditOpen}
+                                                onDelete={handleDeleteOpen}
+                                                reviewer={userInfoCache.get(review.creatorId)}
+                                            />
+                                        ))}
+                                        {reviewsLoading &&
+                                            Array.from({ length: Math.min(12, totalReviews - allReviews.length)}, (_, i) => (
+                                                <Skeleton className="h-40 w-full" key={i} />
+                                            ))
+                                        }
+                                    </div>
+                                    {(allReviews.length < totalReviews) && <Button disabled={reviewsLoading} variant="outline" onClick={fetchReviews}>Fetch More Reviews</Button>}
+                                </div> : 
+                                <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded-lg bg-muted/5 gap-2">
+                                    <p className="text-sm text-muted-foreground font-medium">This user has not been reviewed.</p>
+                                </div>
+                            )}
+
+                        </section>
+                    }
                 </div>
             </div>
         </>
     );
 };
 
+const ReviewCard = memo(({ 
+    review, 
+    teamName,
+    onExpand, 
+    onEdit, 
+    onDelete,
+    reviewer
+}: { 
+    review: ReviewData;
+    teamName: string | undefined;
+    onExpand: (review: ReviewData) => void;
+    onEdit: (review: ReviewData) => void;
+    onDelete: (review: ReviewData) => void;
+    reviewer?: UserInformationBrief;
+}) => {
+    const formattedDate = useMemo(() => 
+        new Date(review.updatedAt).toLocaleString(), 
+        [review.updatedAt]
+    );
+
+    const handleExpand = useCallback(() => onExpand(review), [review, onExpand]);
+    const handleEdit = useCallback((e: React.MouseEvent) => { e.stopPropagation(); onEdit(review); }, [review, onEdit]);
+    const handleDelete = useCallback((e: React.MouseEvent) => { e.stopPropagation(); onDelete(review); }, [review, onDelete]);
+
+    return (
+        <Card key={review._id.toString()} className="!bg-card hover:border-primary/50 transition-colors cursor-pointer" onClick={handleExpand}>
+            <CardContent className="p-4 !pb-2 !pt-4 h-full flex flex-col gap-2">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {reviewer && (
+                            <div className="border-r pr-2">
+                                <Avatar className="h-7 w-7 shrink-0 border-r">
+                                    <AvatarImage src={reviewer.avatar} alt={reviewer.name} />
+                                    <AvatarFallback className="text-[10px]">
+                                        {reviewer.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                    </AvatarFallback>
+                                </Avatar>
+                            </div>
+                        )}
+                        
+                        <CardTitle className="text-sm font-medium text-foreground truncate" title={review.title}>
+                            {review.title}
+                        </CardTitle>
+                    </div>
+                    <Badge variant="secondary" className="flex items-center gap-1 text-xs text-amber-600 bg-amber-500/10 shrink-0">
+                        <Star className="h-3 w-3" />
+                        {review.rating}
+                    </Badge>
+                </div>
+
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-500">
+                    <Briefcase className="h-3 w-3" />
+                    {teamName}
+                </div>
+
+                {review.content && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">
+                        {review.content}
+                    </p>
+                )}
+
+                <div className="flex justify-end pt-2 border-t border-border mt-auto">
+                    <span className="mr-auto">
+                        {!reviewer && <Button onClick={handleEdit} variant="ghost" size="icon" className="h-6 w-5 mr-1 hover:text-green-600 hover:bg-green-50">
+                            <SquarePen size={12} />
+                        </Button>}
+                        <Button onClick={handleDelete} variant="ghost" size="icon" className="h-6 w-6 hover:text-red-600 hover:bg-red-50">
+                            <Trash2Icon size={12} />
+                        </Button>
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">{formattedDate}</span>
+                </div>
+            </CardContent>
+        </Card>
+    );
+});
+
 interface ReviewUserDialogProps {
     open?: boolean;
     openChanged(open: boolean, refresh?: boolean): void;
     reviewTeams: TeamInformationBrief[];
     reviews: ReviewData[];
-    setReviews: (r: ReviewData[]) => void;
+    handleAddReview: (r: ReviewData) => void;
+    handleEditReview: (r: ReviewData) => void;
     editReview?: ReviewData;
 }
 
@@ -587,14 +805,20 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
             const resData = await res.json();
 
             if (props.editReview === undefined) {
-                props.setReviews([resData.review, ...props.reviews]);
+                // props.setReviews([resData.review, ...props.reviews]);
+                props.handleAddReview(resData.review);
             } else {
-                const filtered = props.reviews.filter((r) => r._id !== props.editReview!._id);
-                props.setReviews([resData.review, ...filtered]);
+                // const filtered = props.reviews.filter((r) => r._id !== props.editReview!._id);
+                // props.setReviews([resData.review, ...filtered]);
+                props.handleEditReview(resData.review);
             }
             
             toast.success("Review Submitted");
             props.openChanged(false);
+            setContent('');
+            setRating(5);
+            setTitle('');
+            setTeamId('');
 
         } catch (err: any) {
             toast.error(err.message);
@@ -633,9 +857,8 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
                 <DialogHeader>
                     <DialogTitle>{props.editReview === undefined ? "Write a Review" : "Edit Review"}</DialogTitle>
                 </DialogHeader>
-                <div className="grid gap-4">
-
-                    <div className="grid gap-3">
+                <form className="grid gap-4" id="reviewForm">
+                    <div className="grid gap-2">
                         <Label>Team</Label>
                         <Select required disabled={props.editReview !== undefined} value={teamId} onValueChange={(val) => { 
                             const idx = reviewableTeams.findIndex((t) => t.pk === val);
@@ -655,25 +878,33 @@ const ReviewUserDialog = (props: ReviewUserDialogProps) => {
                                 </SelectGroup>
                             </SelectContent>
                         </Select>
-                        {teamId !== '' &&
-                            <>
-                            <div className="grid gap-3">
-                                <Label htmlFor="name-1">Rating</Label>
-                                <Input type="number" min={1} max={5} step={0.1} required value={rating} onChange={(e) => setRating(Number(e.target.value))} />
-                            </div>
-                            <div className="grid gap-3">
-                                <Label htmlFor="name-1">Title</Label>
-                                <Input maxLength={150} required value={title} onChange={(e) => setTitle(e.target.value)} />
-                            </div>
-                            <div className="grid gap-3">
-                                <Label htmlFor="name-1">Review Content</Label>
-                                <Textarea minLength={50} maxLength={2000} required value={content} onChange={(e) => setContent(e.target.value)} />
-                            </div>
-                            </>
-
-                        }
                     </div>
-                </div>
+                    {teamId !== '' &&
+                        <>
+                        <div className="grid gap-2">
+                            <Label>Rating</Label>
+                            <Input type="number" min={1} max={5} step={0.1} required value={rating} onChange={(e) => setRating(Number(e.target.value))} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Title</Label>
+                            <Input maxLength={150} required value={title} onChange={(e) => setTitle(e.target.value)} />
+                        </div>
+                        <div className="grid gap-1">
+                            <Label className="mb-1">
+                                Review Content
+                                <span className="text-xs font-normal text-muted-foreground">50–2000 characters</span>
+                            </Label>
+                            <Textarea 
+                                minLength={50} maxLength={2000} 
+                                required value={content}
+                                onChange={(e) => setContent(e.target.value)}
+                                aria-invalid={content.length > 0 && content.length < 50}
+                            />
+                            <span className={`ml-auto text-sm ${(content.length > 2000 || content.length < 50) ? 'text-destructive' : 'text-muted-foreground'}`}>{`${content.length}/2000`}</span>
+                        </div>
+                        </>
+                    }
+                </form>
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button variant="outline">Cancel</Button>
@@ -804,8 +1035,7 @@ interface DeleteReviewDialogProps {
     open?: boolean;
     openChanged(open: boolean, refresh?: boolean): void;
     review: ReviewData | null;
-    reviews: ReviewData[];
-    setReviews: (r: ReviewData[]) => void;
+    handleDeleteReview: (r: ReviewData) => void;
 }
 
 const DeleteReviewDialog = (props: DeleteReviewDialogProps) => {
@@ -826,7 +1056,7 @@ const DeleteReviewDialog = (props: DeleteReviewDialogProps) => {
             });
             if (!userRes.ok) throw new Error(userRes.statusText);
             
-            props.setReviews(props.reviews.filter((r) => r._id !== review._id));
+            props.handleDeleteReview(review)
             toast.success("Review Deleted")
         } catch (err) {
             toast.error(`Failed to delete review: ${err}`);
@@ -841,19 +1071,19 @@ const DeleteReviewDialog = (props: DeleteReviewDialogProps) => {
     return (
         <Dialog open={props.open} onOpenChange={props.openChanged}>
             <DialogContent>
-                <DialogHeader>
+                <DialogHeader className="min-w-0 w-full">
                     <DialogTitle>Delete Review</DialogTitle>
                     <DialogDescription>
                         This action cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex flex-col gap-1 rounded-lg border bg-muted/5 p-4">
-                    <p className="text-sm font-medium text-foreground">{review?.title}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{review?.content}</p>
+                <div className="flex flex-col gap-1 rounded-lg border bg-muted/5 p-4 min-w-0 w-full">
+                    <p className="text-sm font-medium text-foreground break-words">{review?.title}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 break-words">{review?.content}</p>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="min-w-0 w-full">
                     <DialogClose asChild>
                         <Button variant="outline" disabled={isLoading}>Cancel</Button>
                     </DialogClose>

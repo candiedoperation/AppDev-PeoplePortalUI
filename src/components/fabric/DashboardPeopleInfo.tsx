@@ -271,7 +271,13 @@ export const DashboardPeopleInfo = () => {
         try {
             setReviewsLoading(true);
 
-            const queryString = new URLSearchParams({ limit: '12', offset: allReviewsLengthRef.current.toString(), getAggregateData: 'false' }).toString();
+            const queryString = new URLSearchParams({
+                limit: '12',
+                offset: allReviewsLengthRef.current.toString(),
+                getAggregateData: 'false',
+                sortBy: "updatedAt",
+                ascending: "false"
+            }).toString();
             const allReviewsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}/reviews?${queryString}`, {
                 credentials: 'include'
             });

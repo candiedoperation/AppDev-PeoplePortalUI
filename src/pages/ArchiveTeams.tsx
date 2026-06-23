@@ -181,13 +181,12 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel, onArch
                                                 <AlertDialogTrigger asChild>
                                                     <Button
                                                         variant="outline"
-                                                        size="sm"
+                                                        size="icon"
                                                         disabled={archivingPk === team.pk}
                                                     >
                                                         {archivingPk === team.pk
                                                             ? <Loader2 className="size-4 animate-spin" />
                                                             : <ArchiveIcon className="size-4" />}
-                                                        Archive
                                                     </Button>
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>

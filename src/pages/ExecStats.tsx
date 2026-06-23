@@ -102,7 +102,7 @@ const StatCard = ({ icon, label, value, sub }: StatCardProps) => (
             <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
             <span className="text-muted-foreground">{icon}</span>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
             {value === null
                 ? <Skeleton className="h-9 w-20 mt-0.5" />
                 : <div className="text-3xl font-bold tracking-tight">{value}</div>

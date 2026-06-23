@@ -1,0 +1,78 @@
+name: PR Checks
+
+on:
+  pull_request:
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type Check
+        run: tsc --noEmit
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Audit Dependencies
+        run: npm audit --audit-level=high
+
+  bundle-size:
+    name: Bundle Size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Check Bundle Size
+        run: |
+          SIZE_KB=$(du -sk dist/ | cut -f1)
+          SIZE_MB=$(echo "scale=2; $SIZE_KB / 1024" | bc)
+          echo "Bundle size: ${SIZE_MB}MB (${SIZE_KB}KB)"
+          echo "### Bundle Size: ${SIZE_MB}MB" >> $GITHUB_STEP_SUMMARY
+          du -sh dist/assets/* >> $GITHUB_STEP_SUMMARY
+          # Fail if total dist exceeds 15MB (tune this down as you optimize)
+          if [ "$SIZE_KB" -gt 15360 ]; then
+            echo "Bundle too large: ${SIZE_MB}MB > 15MB"
+            exit 1
+          fi

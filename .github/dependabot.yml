@@ -1,0 +1,22 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      lexical:
+        patterns:
+          - "@lexical/*"
+          - "lexical"
+      types:
+        patterns:
+          - "@types/*"

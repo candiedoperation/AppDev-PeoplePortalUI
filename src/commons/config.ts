@@ -1,2 +1,1 @@
-
-export const PEOPLEPORTAL_SERVER_ENDPOINT = ""
+export const PEOPLEPORTAL_SERVER_ENDPOINT = ''

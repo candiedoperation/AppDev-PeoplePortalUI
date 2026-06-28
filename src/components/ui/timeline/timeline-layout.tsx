@@ -1,18 +1,18 @@
-'use client';
+'use client'
 
-import React from 'react';
-import { Timeline, TimelineItem } from './timeline';
-import { motion } from 'framer-motion';
-import type { TimelineElement } from './types';
+import React from 'react'
+import { Timeline, TimelineItem } from './timeline'
+import { motion } from 'framer-motion'
+import type { TimelineElement } from './types'
 
 interface TimelineLayoutProps {
-  items: TimelineElement[];
-  size?: 'sm' | 'md' | 'lg';
-  iconColor?: 'primary' | 'secondary' | 'muted' | 'accent';
-  customIcon?: React.ReactNode;
-  animate?: boolean;
-  connectorColor?: 'primary' | 'secondary' | 'muted' | 'accent';
-  className?: string;
+  items: TimelineElement[]
+  size?: 'sm' | 'md' | 'lg'
+  iconColor?: 'primary' | 'secondary' | 'muted' | 'accent'
+  customIcon?: React.ReactNode
+  animate?: boolean
+  connectorColor?: 'primary' | 'secondary' | 'muted' | 'accent'
+  className?: string
 }
 
 export const TimelineLayout = ({
@@ -49,5 +49,5 @@ export const TimelineLayout = ({
         </motion.div>
       ))}
     </Timeline>
-  );
-};
+  )
+}

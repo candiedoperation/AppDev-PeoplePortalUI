@@ -25,9 +25,9 @@ import { ATSDashboard } from './pages/ATSDashboard'
 
 function App() {
   return (
-    <ThemeProvider defaultTheme='system' storageKey='ppf-ui-theme'>
+    <ThemeProvider defaultTheme="system" storageKey="ppf-ui-theme">
       <div className="flex flex-col h-full w-full">
-        <Toaster richColors position='top-right' />
+        <Toaster richColors position="top-right" />
         <Routes>
           <Route path="/*" element={<CorpDashboard />} />
           <Route path="/onboard/:onboardId/*" element={<UserOnboarding />} />

@@ -1,1 +1,1 @@
-export const ORGANIZATION_NAME = "App Dev Club"
+export const ORGANIZATION_NAME = 'App Dev Club'

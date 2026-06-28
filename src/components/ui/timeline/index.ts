@@ -1,2 +1,2 @@
-export * from './timeline';
-export * from './timeline-layout';
+export * from './timeline'
+export * from './timeline-layout'

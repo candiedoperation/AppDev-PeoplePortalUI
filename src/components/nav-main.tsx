@@ -16,14 +16,10 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { Link, useLocation } from "react-router-dom"
-import { ChevronRight, type LucideIcon } from "lucide-react"
+import { Link, useLocation } from 'react-router-dom'
+import { ChevronRight, type LucideIcon } from 'lucide-react'
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -33,7 +29,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+} from '@/components/ui/sidebar'
 
 export function NavMain({
   items,
@@ -50,17 +46,24 @@ export function NavMain({
     }[]
   }[]
 }) {
-  const location = useLocation();
+  const location = useLocation()
 
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Platform</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => {
-          const isGroupActive = item.items?.some((subItem) => location.pathname.startsWith(subItem.url));
+          const isGroupActive = item.items?.some((subItem) =>
+            location.pathname.startsWith(subItem.url)
+          )
 
           return (
-            <Collapsible key={item.title} asChild defaultOpen={isGroupActive} className="group/collapsible">
+            <Collapsible
+              key={item.title}
+              asChild
+              defaultOpen={isGroupActive}
+              className="group/collapsible"
+            >
               <SidebarMenuItem>
                 <CollapsibleTrigger asChild>
                   <SidebarMenuButton tooltip={item.title}>
@@ -73,8 +76,11 @@ export function NavMain({
                   <SidebarMenuSub>
                     {item.items?.map((subItem) => (
                       <SidebarMenuSubItem key={subItem.title}>
-                        <SidebarMenuSubButton asChild isActive={location.pathname.startsWith(subItem.url)}>
-                          {subItem.url.startsWith("http") ? (
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={location.pathname.startsWith(subItem.url)}
+                        >
+                          {subItem.url.startsWith('http') ? (
                             <a href={subItem.url} target="_blank" rel="noopener noreferrer">
                               {subItem.icon && <subItem.icon />}
                               <span className="ml-1">{subItem.title}</span>
@@ -91,7 +97,8 @@ export function NavMain({
                   </SidebarMenuSub>
                 </CollapsibleContent>
               </SidebarMenuItem>
-            </Collapsible>)
+            </Collapsible>
+          )
         })}
       </SidebarMenu>
     </SidebarGroup>

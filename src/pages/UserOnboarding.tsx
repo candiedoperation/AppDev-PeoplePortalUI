@@ -679,10 +679,10 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
                             <ChevronsUpDown className="opacity-50" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-[600px] max-w-[600px] p-0">
+                    <PopoverContent className="w-[600px] max-w-[600px] p-0 max-h-[36rem] overflow-hidden">
                         <Command>
                             <CommandInput placeholder="Search UMD Major" className="h-9" />
-                            <CommandList>
+                            <CommandList className="flex-1 min-h-0 max-h-[24rem] overflow-y-auto">
                                 <CommandEmpty>No Majors Found</CommandEmpty>
                                 <CommandGroup>
                                     {majors.map((framework) => (

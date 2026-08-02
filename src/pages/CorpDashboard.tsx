@@ -86,7 +86,8 @@ interface BreadcrumbItem {
 export interface CorpUserInfo {
     name: string,
     avatar: string,
-    email: string
+    email: string,
+    pk : number
 }
 
 export const CorpDashboard = () => {
@@ -96,7 +97,8 @@ export const CorpDashboard = () => {
     const [userInfo, setUserInfo] = React.useState<CorpUserInfo>({
         name: "Unknown",
         email: "unknown@unknown.local",
-        avatar: ""
+        avatar: "",
+        pk: 0
     });
 
     React.useEffect(() => {

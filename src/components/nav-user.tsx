@@ -43,6 +43,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useNavigate } from "react-router-dom"
 
 export function NavUser({
   user,
@@ -51,9 +52,11 @@ export function NavUser({
     name: string
     email: string
     avatar: string
+    pk: number
   }
 }) {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
 
   const getFallbackAvatar = () => {
     const nameArray = user.name.split(" ");
@@ -104,7 +107,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/org/people/${user.pk}`)}>
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>

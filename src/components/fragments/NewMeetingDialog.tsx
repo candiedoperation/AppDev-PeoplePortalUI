@@ -24,6 +24,8 @@ import { Input } from "../ui/input"
 import { Label } from "../ui/label"
 import { Textarea } from "../ui/textarea"
 import { Checkbox } from "../ui/checkbox"
+import { Badge } from "../ui/badge"
+import { ScrollArea } from "../ui/scroll-area"
 import { DatePicker } from "./DatePicker"
 
 const DATE_FMT = "yyyy-MM-dd"
@@ -31,6 +33,39 @@ const TIME_FMT = "HH:mm"
 
 /** Combines a "yyyy-MM-dd" date and a "HH:mm" time into a local Date. */
 const combine = (dateStr: string, timeStr: string): Date => new Date(`${dateStr}T${timeStr}`)
+
+/** A team member selectable as a meeting attendee. */
+export interface RosterMember {
+  pk: number
+  name: string
+  username: string
+  email: string
+}
+
+/** How an attendee is invited; absence from the map means "not invited". */
+export type AttendeeRole = "required" | "optional"
+
+/** A subteam selectable as a meeting attendee, invited by reference. */
+export interface SubteamOption {
+  pk: string
+  name: string
+}
+
+/** Everything the dialog collects for a create or edit. */
+export interface MeetingDraft {
+  name: string
+  description: string
+  start: Date
+  end: Date
+  recurring?: boolean
+  requiredAttendees?: number[]
+  optionalAttendees?: number[]
+  /** Subteam group PKs invited by reference (membership resolved live) */
+  requiredSubteams?: string[]
+  optionalSubteams?: string[]
+  /** Whether uninvited team members can see this meeting */
+  visibleToAll: boolean
+}
 
 export interface NewMeetingDialogProps {
   open: boolean
@@ -41,10 +76,15 @@ export interface NewMeetingDialogProps {
   initialDescription?: string
   initialStart?: Date
   initialEnd?: Date
+  initialVisibleToAll?: boolean
   /** Inclusive bounds: dates outside the team's lifespan can't be picked. */
   minDate?: Date
   maxDate?: Date
-  onConfirm: (name: string, description: string, start: Date, end: Date, recurring?: boolean) => void
+  /** Team members offered in the attendee picker (create mode only) */
+  roster?: RosterMember[]
+  /** Subteams offered in the attendee picker (create mode only) */
+  subteams?: SubteamOption[]
+  onConfirm: (draft: MeetingDraft) => void
 }
 
 export const NewMeetingDialog = (props: NewMeetingDialogProps) => {
@@ -55,6 +95,12 @@ export const NewMeetingDialog = (props: NewMeetingDialogProps) => {
   const [startTime, setStartTime] = React.useState("09:00")
   const [endTime, setEndTime] = React.useState("10:00")
   const [repeat, setRepeat] = React.useState(false)
+  /** Selected attendees keyed by user pk → invitation role. */
+  const [attendees, setAttendees] = React.useState<Map<number, AttendeeRole>>(new Map())
+  /** Selected subteams keyed by group pk → invitation role. */
+  const [subteamSel, setSubteamSel] = React.useState<Map<string, AttendeeRole>>(new Map())
+  const [visibleToAll, setVisibleToAll] = React.useState(false)
+  const [memberSearch, setMemberSearch] = React.useState("")
 
   React.useEffect(() => {
     if (!props.open) return
@@ -66,7 +112,32 @@ export const NewMeetingDialog = (props: NewMeetingDialogProps) => {
     setStartTime(format(start, TIME_FMT))
     setEndTime(props.initialEnd ? format(end, TIME_FMT) : "10:00")
     setRepeat(false)
-  }, [props.open, props.initialName, props.initialDescription, props.initialStart, props.initialEnd])
+    setAttendees(new Map())
+    setSubteamSel(new Map())
+    setVisibleToAll(props.initialVisibleToAll ?? false)
+    setMemberSearch("")
+  }, [props.open, props.initialName, props.initialDescription, props.initialStart, props.initialEnd, props.initialVisibleToAll])
+
+  /** Cycles an entry through not-invited → required → optional → not-invited. */
+  const cycleRole = <K,>(setter: React.Dispatch<React.SetStateAction<Map<K, AttendeeRole>>>) => (pk: K) =>
+    setter((prev) => {
+      const next = new Map(prev)
+      const current = next.get(pk)
+      if (current === undefined) next.set(pk, "required")
+      else if (current === "required") next.set(pk, "optional")
+      else next.delete(pk)
+      return next
+    })
+  const cycleAttendee = cycleRole(setAttendees)
+  const cycleSubteam = cycleRole(setSubteamSel)
+
+  const roster = props.roster ?? []
+  const subteams = props.subteams ?? []
+  const filteredRoster = roster.filter((m) => {
+    const q = memberSearch.trim().toLowerCase()
+    return !q || m.name.toLowerCase().includes(q) || m.username.toLowerCase().includes(q)
+  })
+  const selectedCount = attendees.size + subteamSel.size
 
   const startDate = date ? combine(date, startTime) : null
   const endDate = date ? combine(date, endTime) : null
@@ -83,7 +154,24 @@ export const NewMeetingDialog = (props: NewMeetingDialogProps) => {
 
   const handleConfirm = () => {
     if (!isValid || !startDate || !endDate) return
-    props.onConfirm(name.trim(), description.trim(), startDate, endDate, !isEditing && repeat)
+    const required: number[] = []
+    const optional: number[] = []
+    attendees.forEach((role, pk) => (role === "required" ? required : optional).push(pk))
+    const requiredSubs: string[] = []
+    const optionalSubs: string[] = []
+    subteamSel.forEach((role, pk) => (role === "required" ? requiredSubs : optionalSubs).push(pk))
+    props.onConfirm({
+      name: name.trim(),
+      description: description.trim(),
+      start: startDate,
+      end: endDate,
+      recurring: !isEditing && repeat,
+      requiredAttendees: isEditing ? undefined : required,
+      optionalAttendees: isEditing ? undefined : optional,
+      requiredSubteams: isEditing ? undefined : requiredSubs,
+      optionalSubteams: isEditing ? undefined : optionalSubs,
+      visibleToAll,
+    })
     props.onOpenChange(false)
   }
 
@@ -158,6 +246,70 @@ export const NewMeetingDialog = (props: NewMeetingDialogProps) => {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Meeting agenda or notes (optional)"
             />
+          </div>
+
+          {!isEditing && (roster.length > 0 || subteams.length > 0) && (
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <Label>Attendees</Label>
+                <span className="text-xs text-muted-foreground tabular-nums">{selectedCount} invited</span>
+              </div>
+              {subteams.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {subteams.map((s) => {
+                    const role = subteamSel.get(s.pk)
+                    return (
+                      <button type="button" key={s.pk} onClick={() => cycleSubteam(s.pk)} title="Invite the whole subteam; people joining later are included automatically">
+                        <Badge variant={role === "required" ? "default" : role === "optional" ? "secondary" : "outline"} className={!role ? "text-muted-foreground" : ""}>
+                          {s.name}{role === "optional" && " · optional"}
+                        </Badge>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              <Input
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+                placeholder="Search team members"
+              />
+              <ScrollArea className="h-40 rounded-md border">
+                <div className="p-1">
+                  {filteredRoster.length === 0 && (
+                    <p className="px-2 py-3 text-sm text-muted-foreground">No members found.</p>
+                  )}
+                  {filteredRoster.map((m) => {
+                    const role = attendees.get(m.pk)
+                    return (
+                      <button
+                        type="button"
+                        key={m.pk}
+                        onClick={() => cycleAttendee(m.pk)}
+                        className="flex h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm hover:bg-accent"
+                      >
+                        <span className="truncate">{m.name}</span>
+                        <span className="shrink-0">
+                          {role === "required" && <Badge>Required</Badge>}
+                          {role === "optional" && <Badge variant="secondary">Optional</Badge>}
+                          {!role && <Badge variant="outline" className="text-muted-foreground">Invite</Badge>}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+              <p className="text-xs text-muted-foreground">Tap a subteam or member to cycle required, optional, or not invited. Subteams are invited as a whole — their current members always count.</p>
+            </div>
+          )}
+
+          <div className="flex items-start gap-2">
+            <Checkbox id="meeting-visible" checked={visibleToAll} onCheckedChange={(v) => setVisibleToAll(v === true)} />
+            <div className="grid gap-1">
+              <Label htmlFor="meeting-visible" className="font-normal">Visible to everyone</Label>
+              <p className="text-xs text-muted-foreground">
+                When off, only invited people/subteams and meeting managers see this event. Events with no invitees are always visible to the whole team.
+              </p>
+            </div>
           </div>
         </div>
 

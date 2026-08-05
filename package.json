@@ -57,6 +57,7 @@
     "input-otp": "^1.4.2",
     "lexical": "^0.39.0",
     "lucide-react": "^0.539.0",
+    "qrcode.react": "^4.2.0",
     "radix-ui": "^1.5.0",
     "react": "^19.1.1",
     "react-d3-tree": "^3.6.6",

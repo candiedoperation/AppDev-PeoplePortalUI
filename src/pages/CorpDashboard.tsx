@@ -27,6 +27,8 @@ import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualizat
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
 import { TeamMeetings } from "./TeamMeetings"
+import { MeetingDetail } from "./MeetingDetail"
+import { MeetingCheckin } from "./MeetingCheckin"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -129,7 +131,7 @@ export const CorpDashboard = () => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/userinfo`)
             .then(async (response) => {
                 if (response.status === 401) {
-                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login?return_to=${encodeURIComponent(window.location.href)}`
                     return
                 }
 
@@ -138,7 +140,7 @@ export const CorpDashboard = () => {
                     setUserInfo(_ => userlistResponse)
                 } catch (e) {
                     /* Backend likely returned a redirect to login page (HTML), so we should redirect */
-                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login?return_to=${encodeURIComponent(window.location.href)}`
                 }
             })
             .catch((e) => {
@@ -190,6 +192,8 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                         <Route path="/org/teams/:teamId/meetings" element={<TeamMeetings />} />
+                        <Route path="/org/teams/:teamId/meetings/:meetingId" element={<MeetingDetail />} />
+                        <Route path="/org/teams/:teamId/meetings/:meetingId/checkin" element={<MeetingCheckin />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />

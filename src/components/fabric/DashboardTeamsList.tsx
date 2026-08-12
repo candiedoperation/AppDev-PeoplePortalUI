@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 import { Input } from "../ui/input";
 import { AlertTriangleIcon, ExternalLinkIcon, PlusIcon, UsersRound } from "lucide-react";
 import { Button } from "../ui/button";
+import { DatePicker } from "../fragments/DatePicker";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { ORGANIZATION_NAME } from "@/commons/strings";
@@ -245,6 +246,8 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const [teamSeason, setTeamSeason] = React.useState<string>()
     const [teamType, setTeamType] = React.useState("");
     const [teamYear] = React.useState<number>(new Date().getFullYear())
+    const [teamStartDate, setTeamStartDate] = React.useState("")
+    const [teamEndDate, setTeamEndDate] = React.useState("")
 
     /* Role Management */
     const [projectLeadConfirmed, setProjectLeadConfirmed] = React.useState(false)
@@ -253,6 +256,16 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
     const [isLoading, setIsLoading] = React.useState(false)
 
     const handleFormSubmit = () => {
+        if (!teamStartDate || !teamEndDate) {
+            toast.error("Team start and end dates are required")
+            return;
+        }
+
+        if (new Date(teamStartDate) > new Date(teamEndDate)) {
+            toast.error("Team start date must be on or before team end date")
+            return;
+        }
+
         setIsLoading(true)
 
         /* Resolve Requestor Role */
@@ -270,6 +283,8 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                 seasonYear: teamYear,
                 seasonType: teamSeason,
                 description: teamDescription,
+                teamStartDate,
+                teamEndDate,
                 requestorRole: requestorRole
             })
         }).then(async (res) => {
@@ -377,6 +392,23 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                             />
                         </div>
                     </div>
+                    <div className="grid gap-3">
+                        <Label htmlFor="team-start-date">Team Start Date</Label>
+                        <DatePicker
+                            id="team-start-date"
+                            value={teamStartDate}
+                            onChange={setTeamStartDate}
+                        />
+                    </div>
+                    <div className="grid gap-3">
+                        <Label htmlFor="team-end-date">Team End Date</Label>
+                        <DatePicker
+                            id="team-end-date"
+                            value={teamEndDate}
+                            onChange={setTeamEndDate}
+                            disabledBefore={teamStartDate || undefined}
+                        />
+                    </div>
                 </div>
                 <DialogFooter>
                     <DialogClose asChild>
@@ -384,7 +416,7 @@ const CreateNewTeamDialog = (props: CreateNewTeamDialogProps) => {
                     </DialogClose>
                     <Button
                         onClick={handleFormSubmit}
-                        disabled={isLoading || (teamName.trim().length < 3) || !teamSeason || !teamType || !isRoleValid()}
+                        disabled={isLoading || (teamName.trim().length < 3) || !teamSeason || !teamType || !isRoleValid() || !teamStartDate || !teamEndDate || new Date(teamStartDate) > new Date(teamEndDate)}
                     >
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Create Team

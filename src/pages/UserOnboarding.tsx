@@ -50,6 +50,7 @@ import Cropper, { type Area, type Point } from 'react-easy-crop'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import imageCompression from 'browser-image-compression';
 import { Slider } from '@/components/ui/slider'
+import { LINKEDIN_PROFILE_ERROR, normalizeLinkedInProfileUrl } from '@/lib/linkedin'
 
 interface CompleteSetupStageProps {
     stages: { name: string, status: boolean }[],
@@ -83,7 +84,8 @@ interface PersonalInfoData {
     profileUrl: string,
     major: UMDApiMajorListResponse,
     expectedGrad: string,
-    phoneNumber: string
+    phoneNumber: string,
+    linkedinUrl?: string
 }
 
 interface PersonalInfoStageProps {
@@ -178,6 +180,7 @@ export const UserOnboarding = () => {
                 major: personalInfoRef.current?.major.name,
                 expectedGrad: personalInfoRef.current?.expectedGrad,
                 phoneNumber: personalInfoRef.current?.phoneNumber,
+                linkedinUrl: personalInfoRef.current?.linkedinUrl,
                 avatarKey: personalInfoRef.current?.avatarKey
             })
         }).then((res) => {
@@ -369,6 +372,8 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
     const [avatarKey, setAvatarKey] = React.useState<string | undefined>(props.defaultData?.avatarKey);
     const fileUploadRef = React.useRef<HTMLInputElement>(null)
     const [phoneNumber, setPhoneNumber] = React.useState(props.defaultData?.phoneNumber ?? "")
+    const [linkedinUrl, setLinkedinUrl] = React.useState(props.defaultData?.linkedinUrl ?? "")
+    const [linkedinError, setLinkedinError] = React.useState("")
     const [selectedMajor, setSelectedMajor] = React.useState<UMDApiMajorListResponse | undefined>(props.defaultData?.major)
     const [isUploading, setIsUploading] = React.useState(false);
 
@@ -731,16 +736,55 @@ const PersonalInfoStage = (props: PersonalInfoStageProps) => {
                     onChange={(number) => setPhoneNumber(number)} />
             </div>
 
+            <div className={'grid gap-2 w-lg mt-5'}>
+                <Label htmlFor="onboarding-linkedin">
+                    LinkedIn Profile <span className="text-muted-foreground font-normal">(Optional)</span>
+                </Label>
+                <Input
+                    id="onboarding-linkedin"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="url"
+                    maxLength={300}
+                    placeholder="https://www.linkedin.com/in/your-name"
+                    value={linkedinUrl}
+                    aria-invalid={Boolean(linkedinError)}
+                    onChange={(e) => {
+                        setLinkedinUrl(e.target.value)
+                        if (linkedinError) setLinkedinError("")
+                    }}
+                    onBlur={() => {
+                        const normalized = normalizeLinkedInProfileUrl(linkedinUrl)
+                        if (normalized === null) {
+                            setLinkedinError(LINKEDIN_PROFILE_ERROR)
+                        } else {
+                            setLinkedinUrl(normalized)
+                            setLinkedinError("")
+                        }
+                    }}
+                />
+                {linkedinError && <p className="text-sm text-destructive">{linkedinError}</p>}
+            </div>
+
             <Button
                 className='mt-8'
                 disabled={!expectedGraduation || !selectedMajor || !phoneNumber || !preview || isUploading}
-                onClick={() => props.stepComplete({
-                    profileUrl: preview!,
-                    avatarKey: avatarKey,
-                    major: selectedMajor!,
-                    expectedGrad: expectedGraduation,
-                    phoneNumber: phoneNumber
-                })}
+                onClick={() => {
+                    const normalizedLinkedinUrl = normalizeLinkedInProfileUrl(linkedinUrl)
+                    if (normalizedLinkedinUrl === null) {
+                        setLinkedinError(LINKEDIN_PROFILE_ERROR)
+                        return
+                    }
+
+                    props.stepComplete({
+                        profileUrl: preview!,
+                        avatarKey: avatarKey,
+                        major: selectedMajor!,
+                        expectedGrad: expectedGraduation,
+                        phoneNumber: phoneNumber,
+                        linkedinUrl: normalizedLinkedinUrl
+                    })
+                }}
             >
                 <Loader2Icon className={cn('animate-spin mr-2', !isUploading && 'hidden')} />
                 Continue

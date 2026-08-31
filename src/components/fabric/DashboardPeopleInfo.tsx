@@ -22,13 +22,14 @@ import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, PencilIcon, Loader2Icon, Check, ChevronsUpDown, Minus, Plus, UploadCloudIcon } from 'lucide-react';
+import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, PencilIcon, Loader2Icon, Check, ChevronsUpDown, Minus, Plus, UploadCloudIcon, Linkedin } from 'lucide-react';
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { PhoneInput } from '@/components/ui/phone-input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -36,6 +37,7 @@ import { Slider } from '@/components/ui/slider';
 import Cropper, { type Area, type Point } from 'react-easy-crop';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
+import { LINKEDIN_PROFILE_ERROR, normalizeLinkedInProfileUrl } from '@/lib/linkedin';
 
 // --- Interfaces matching the Backend ---
 
@@ -70,6 +72,7 @@ interface UserAttributeDefinition {
     major: string;
     expectedGrad: string;
     phoneNumber: string;
+    linkedinUrl?: string;
     roles: { [key: string]: string };
     alumniAccount: boolean;
 }
@@ -205,6 +208,8 @@ export const DashboardPeopleInfo = () => {
     const [editPhone, setEditPhone] = useState('');
     const [editMajor, setEditMajor] = useState<UMDMajor | undefined>(undefined);
     const [editGrad, setEditGrad] = useState('');
+    const [editLinkedin, setEditLinkedin] = useState('');
+    const [editLinkedinError, setEditLinkedinError] = useState('');
     const [editAvatarKey, setEditAvatarKey] = useState<string | undefined>(undefined);
     const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -275,6 +280,8 @@ export const DashboardPeopleInfo = () => {
         if (!user) return;
         setEditPhone(user.attributes?.phoneNumber ?? '');
         setEditGrad(user.attributes?.expectedGrad ?? '');
+        setEditLinkedin(user.attributes?.linkedinUrl ?? '');
+        setEditLinkedinError('');
         setEditAvatarPreview(user.avatar || null);
         setEditAvatarKey(undefined);
         if (user.attributes?.major) {
@@ -349,12 +356,20 @@ export const DashboardPeopleInfo = () => {
 
     const handleSave = async () => {
         if (!userPk) return;
+
+        const normalizedLinkedinUrl = normalizeLinkedInProfileUrl(editLinkedin);
+        if (normalizedLinkedinUrl === null) {
+            setEditLinkedinError(LINKEDIN_PROFILE_ERROR);
+            return;
+        }
+
         setIsSaving(true);
         try {
             const body: Record<string, string> = {};
             if (editPhone !== (user?.attributes?.phoneNumber ?? '')) body.phoneNumber = editPhone;
             if (editGrad !== (user?.attributes?.expectedGrad ?? '')) body.expectedGrad = editGrad;
             if (editMajor && editMajor.name !== user?.attributes?.major) body.major = editMajor.name;
+            if (normalizedLinkedinUrl !== (user?.attributes?.linkedinUrl ?? '')) body.linkedinUrl = normalizedLinkedinUrl;
             if (editAvatarKey) body.avatarKey = editAvatarKey;
 
             if (Object.keys(body).length === 0) { setEditOpen(false); return; }
@@ -406,6 +421,7 @@ export const DashboardPeopleInfo = () => {
 
     const { attributes } = user;
     const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    const linkedinHref = normalizeLinkedInProfileUrl(attributes?.linkedinUrl ?? '');
 
     // Build role entries from attributes.roles, looking up team info from map
     // Filter out entries where team info couldn't be found
@@ -474,6 +490,21 @@ export const DashboardPeopleInfo = () => {
                                 <Phone className="h-4 w-4 shrink-0" />
                                 <a href={`tel:${attributes.phoneNumber}`} className="hover:text-primary hover:underline truncate transition-colors" title={attributes.phoneNumber}>
                                     {attributes.phoneNumber}
+                                </a>
+                            </div>
+                        )}
+
+                        {linkedinHref && (
+                            <div className="flex items-center gap-2">
+                                <Linkedin className="h-4 w-4 shrink-0" />
+                                <a
+                                    href={linkedinHref}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="hover:text-primary hover:underline truncate transition-colors"
+                                    title={linkedinHref}
+                                >
+                                    LinkedIn
                                 </a>
                             </div>
                         )}
@@ -643,6 +674,37 @@ export const DashboardPeopleInfo = () => {
                         <div className="grid gap-1.5">
                             <Label>Phone Number</Label>
                             <PhoneInput defaultCountry="US" value={editPhone} onChange={setEditPhone} placeholder="Enter phone number" />
+                        </div>
+
+                        {/* LinkedIn */}
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="profile-linkedin">
+                                LinkedIn Profile <span className="text-muted-foreground font-normal">(Optional)</span>
+                            </Label>
+                            <Input
+                                id="profile-linkedin"
+                                type="url"
+                                inputMode="url"
+                                autoComplete="url"
+                                maxLength={300}
+                                placeholder="https://www.linkedin.com/in/your-name"
+                                value={editLinkedin}
+                                aria-invalid={Boolean(editLinkedinError)}
+                                onChange={(e) => {
+                                    setEditLinkedin(e.target.value);
+                                    if (editLinkedinError) setEditLinkedinError('');
+                                }}
+                                onBlur={() => {
+                                    const normalized = normalizeLinkedInProfileUrl(editLinkedin);
+                                    if (normalized === null) {
+                                        setEditLinkedinError(LINKEDIN_PROFILE_ERROR);
+                                    } else {
+                                        setEditLinkedin(normalized);
+                                        setEditLinkedinError('');
+                                    }
+                                }}
+                            />
+                            {editLinkedinError && <p className="text-sm text-destructive">{editLinkedinError}</p>}
                         </div>
                     </div>
 

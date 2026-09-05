@@ -53,10 +53,6 @@ interface GetUserListResponse {
     users: UserBrief[]
 }
 
-interface OrgSettings {
-    currentYear: string
-}
-
 interface ClassCounts {
     Freshman: number
     Sophomore: number
@@ -172,18 +168,12 @@ export const ExecStats = () => {
         const load = async () => {
             setClassLoading(true)
             try {
-                /* Fetch settings and first page of members in parallel */
-                const [settingsRes, firstPageRes] = await Promise.all([
-                    fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/exec/settings`),
-                    fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people?page=1`),
-                ])
-
-                const settings: OrgSettings = settingsRes.ok
-                    ? await settingsRes.json()
-                    : { currentYear: String(new Date().getFullYear()) }
-
-                const currentYear = parseInt(settings.currentYear)
+                /* The current year comes from the clock; there is no reason to
+                   store or configure something the calendar already tells us. */
+                const currentYear = new Date().getFullYear()
                 setClassCurrentYear(currentYear)
+
+                const firstPageRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people?page=1`)
 
                 if (!firstPageRes.ok) throw new Error(firstPageRes.statusText)
                 const firstData: GetUserListResponse = await firstPageRes.json()

@@ -44,6 +44,7 @@ import {
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { ArchiveIcon, Loader2, SearchIcon, UsersRound } from "lucide-react"
+import { partitionByLifecycle } from "@/lib/season"
 
 /* ─────────────────────────────────────────────
    Data types
@@ -67,7 +68,7 @@ interface GetTeamsListResponse {
 }
 
 /* ─────────────────────────────────────────────
-   Teams table (shared by both tabs)
+   Teams table (shared by the tabs)
 ───────────────────────────────────────────── */
 
 interface TeamsTableProps {
@@ -183,6 +184,8 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel, onArch
                                                         variant="outline"
                                                         size="icon"
                                                         disabled={archivingPk === team.pk}
+                                                        aria-label={`Archive ${team.friendlyName}`}
+                                                        title={`Archive ${team.friendlyName}`}
                                                     >
                                                         {archivingPk === team.pk
                                                             ? <Loader2 className="size-4 animate-spin" />
@@ -232,6 +235,7 @@ export const ArchiveTeams = () => {
     const [loading, setLoading] = React.useState(true)
     const [teams, setTeams] = React.useState<TeamInformationBrief[]>([])
     const [activeSearch, setActiveSearch] = React.useState("")
+    const [expiredSearch, setExpiredSearch] = React.useState("")
     const [archivedSearch, setArchivedSearch] = React.useState("")
     const [archivingPk, setArchivingPk] = React.useState<string | null>(null)
 
@@ -267,19 +271,18 @@ export const ArchiveTeams = () => {
         load()
     }, [])
 
-    /* Archived = explicitly archived (archivedAt set); everything else is active */
-    const { active, archived } = React.useMemo(() => {
-        const active: TeamInformationBrief[] = []
-        const archived: TeamInformationBrief[] = []
-        for (const team of teams) {
-            if (team.archivedAt) archived.push(team)
-            else active.push(team)
-        }
+    /* Three buckets:
+         Archived - explicitly archived (archivedAt set)
+         Expired  - season has passed but nobody archived it yet
+         Active   - current season, still running                       */
+    const { active, expired, archived } = React.useMemo(() => {
+        const { active, expired, archived } = partitionByLifecycle(teams)
         const byNameThenYear = (a: TeamInformationBrief, b: TeamInformationBrief) =>
             b.seasonYear - a.seasonYear || a.friendlyName.localeCompare(b.friendlyName)
         active.sort(byNameThenYear)
+        expired.sort(byNameThenYear)
         archived.sort(byNameThenYear)
-        return { active, archived }
+        return { active, expired, archived }
     }, [teams])
 
     /* Archive a root team, then mark it archived locally so it moves tabs */
@@ -308,13 +311,16 @@ export const ArchiveTeams = () => {
             {/* Header */}
             <div className="flex flex-col gap-3">
                 <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">Archive Teams</h1>
-                <h4 className="text-xl text-muted-foreground">Browse active and archived teams</h4>
+                <h4 className="text-xl text-muted-foreground">Browse active, expired and archived teams</h4>
             </div>
 
             <Tabs defaultValue="active" className="flex flex-1 flex-col gap-4">
                 <TabsList>
                     <TabsTrigger value="active">
                         Active{!loading && ` (${active.length})`}
+                    </TabsTrigger>
+                    <TabsTrigger value="expired">
+                        Expired{!loading && ` (${expired.length})`}
                     </TabsTrigger>
                     <TabsTrigger value="archived">
                         Archived{!loading && ` (${archived.length})`}
@@ -328,6 +334,18 @@ export const ArchiveTeams = () => {
                         search={activeSearch}
                         onSearchChange={setActiveSearch}
                         emptyLabel="No active teams."
+                        onArchive={handleArchive}
+                        archivingPk={archivingPk}
+                    />
+                </TabsContent>
+
+                <TabsContent value="expired">
+                    <TeamsTable
+                        loading={loading}
+                        teams={expired}
+                        search={expiredSearch}
+                        onSearchChange={setExpiredSearch}
+                        emptyLabel="No expired teams."
                         onArchive={handleArchive}
                         archivingPk={archivingPk}
                     />

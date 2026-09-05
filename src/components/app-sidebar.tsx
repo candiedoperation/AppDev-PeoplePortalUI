@@ -30,7 +30,6 @@ import {
     NetworkIcon,
     PersonStandingIcon,
     ScaleIcon,
-    SettingsIcon,
     Terminal,
     TicketIcon,
     Users,
@@ -100,7 +99,6 @@ const buildNavMain = (isExecutive: boolean) => {
             items: [
                 { icon: BarChart3Icon, title: "Stats", url: "/exec/stats" },
                 { icon: ArchiveIcon, title: "Archive Teams", url: "/exec/archive-teams" },
-                { icon: SettingsIcon, title: "Settings", url: "/exec/settings" },
             ],
         })
     }

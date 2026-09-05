@@ -26,11 +26,13 @@ import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
-import { Events } from "./Events"
-import { EventAttendance } from "./EventAttendance"
 import { ExecStats } from "./ExecStats"
 import { ArchiveTeams } from "./ArchiveTeams"
-import { Settings } from "./Settings"
+import { TeamMeetings } from "./TeamMeetings"
+import { MeetingDetail } from "./MeetingDetail"
+import { MeetingCheckin } from "./MeetingCheckin"
+import { Events } from "../components/fabric/Events"
+import { EventAttendance } from "../components/fabric/EventAttendance"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -72,6 +74,9 @@ const translateBreadcrumbPath = (path: string) => {
         case "recruitment":
             return "Recruitment Tracker"
 
+        case "meetings":
+            return "Meetings"
+
         case "platform":
             return "People Portal Platform"
 
@@ -86,9 +91,6 @@ const translateBreadcrumbPath = (path: string) => {
 
         case "archive-teams":
             return "Archive Teams"
-
-        case "settings":
-            return "Settings"
 
         default:
             return path
@@ -144,7 +146,7 @@ export const CorpDashboard = () => {
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/userinfo`)
             .then(async (response) => {
                 if (response.status === 401) {
-                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login?return_to=${encodeURIComponent(window.location.href)}`
                     return
                 }
 
@@ -153,7 +155,7 @@ export const CorpDashboard = () => {
                     setUserInfo(_ => userlistResponse)
                 } catch (e) {
                     /* Backend likely returned a redirect to login page (HTML), so we should redirect */
-                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login`
+                    window.location.href = `${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/login?return_to=${encodeURIComponent(window.location.href)}`
                 }
             })
             .catch((e) => {
@@ -204,6 +206,9 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams" element={<DashboardTeamsList />} />
                         <Route path="/org/teams/:teamId" element={<DashboardTeamInfo />} />
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
+                        <Route path="/org/teams/:teamId/meetings" element={<TeamMeetings />} />
+                        <Route path="/org/teams/:teamId/meetings/:meetingId" element={<MeetingDetail />} />
+                        <Route path="/org/teams/:teamId/meetings/:meetingId/checkin" element={<MeetingCheckin />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
                         <Route path="/community/events" element={<Events />} />
@@ -215,10 +220,6 @@ export const CorpDashboard = () => {
                         <Route
                             path="/exec/archive-teams"
                             element={userInfo.isExecutive ? <ArchiveTeams /> : <Navigate to="/org/people" />}
-                        />
-                        <Route
-                            path="/exec/settings"
-                            element={userInfo.isExecutive ? <Settings /> : <Navigate to="/org/people" />}
                         />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>

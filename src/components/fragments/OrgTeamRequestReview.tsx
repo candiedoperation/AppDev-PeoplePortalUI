@@ -36,6 +36,8 @@ interface TeamCreationRequest {
         teamType: string;
         seasonType: string;
         seasonYear: number;
+        teamStartDate: string;
+        teamEndDate: string;
         description: string;
         requestorRole: string;
     };
@@ -155,6 +157,10 @@ export const OrgTeamRequestReview = () => {
                                         <TableRow>
                                             <TableCell className="font-bold w-1/4 align-top">Season</TableCell>
                                             <TableCell>{request.createTeamRequest.seasonType} {request.createTeamRequest.seasonYear}</TableCell>
+                                        </TableRow>
+                                        <TableRow>
+                                            <TableCell className="font-bold w-1/4 align-top">Team Dates</TableCell>
+                                            <TableCell>{request.createTeamRequest.teamStartDate} to {request.createTeamRequest.teamEndDate}</TableCell>
                                         </TableRow>
                                         <TableRow>
                                             <TableCell className="font-bold w-1/4 align-top">Description</TableCell>

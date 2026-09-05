@@ -16,7 +16,7 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { BanIcon, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
+import { BanIcon, Calendar, Check, ChevronsUpDown, ExternalLinkIcon, KeyRoundIcon, Loader2Icon, NotebookPenIcon, PencilIcon, RefreshCcwIcon, SearchIcon, SettingsIcon, SquarePlusIcon, Trash2Icon, TriangleAlertIcon, User2Icon, UserPlus2Icon, Users2Icon, WorkflowIcon } from "lucide-react"
 import { Button } from "../ui/button"
 import React from "react";
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config";
@@ -31,6 +31,7 @@ import { Input } from "../ui/input";
 import { ORGANIZATION_NAME } from "@/commons/strings";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "../ui/command";
+import { DatePicker } from "../fragments/DatePicker";
 import { cn } from "@/lib/utils";
 import type { GetUserListResponse } from "./DashboardPeopleList";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
@@ -54,6 +55,8 @@ export interface TeamInfo {
         teamType: string,
         seasonType: string,
         seasonYear: number,
+        teamStartDate?: string,
+        teamEndDate?: string,
         rootTeamSettings?: any
         flaggedForDeletion?: boolean
     }
@@ -214,7 +217,7 @@ export const DashboardTeamInfo = () => {
             });
     }
 
-    const handleTeamInfoChange = (name: string, description: string) => {
+    const handleTeamInfoChange = (name: string, description: string, teamStartDate: string, teamEndDate: string) => {
         if (!name.trim()) {
             toast.error("Name cannot be blank!");
             return;
@@ -225,12 +228,24 @@ export const DashboardTeamInfo = () => {
             return;
         }
 
+        if (!teamStartDate || !teamEndDate) {
+            toast.error("Team start and end dates are required!");
+            return;
+        }
+
+        if (new Date(teamStartDate) > new Date(teamEndDate)) {
+            toast.error("Team start date must be on or before team end date!");
+            return;
+        }
+
         fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/teams/${params.teamId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 friendlyName: name,
-                description: description
+                description: description,
+                teamStartDate,
+                teamEndDate,
             })
         }).then(async attrResponse => {
             if (!attrResponse.ok) {
@@ -378,6 +393,11 @@ export const DashboardTeamInfo = () => {
                     <Button onClick={() => setTeamSettingsOpen(true)} variant="outline" className="cursor-pointer">
                         <SettingsIcon />
                         Team Settings
+                    </Button>
+
+                    <Button onClick={() => navigate("./meetings")} variant="outline" className="cursor-pointer">
+                        <Calendar />
+                        Team Meetings
                     </Button>
                 </div>
             </div>
@@ -1101,11 +1121,11 @@ const TeamSettingsDialog = (props: {
     settingDefinitions: RootTeamSettingMap,
     isSaving: boolean,
     onSave: (settings: { [clientName: string]: { [settingKey: string]: boolean } }) => void,
-    onTeamInfoChange: (name: string, description: string) => void
+    onTeamInfoChange: (name: string, description: string, teamStartDate: string, teamEndDate: string) => void
 }) => {
     // Store settings grouped by client name: { "AWSClient": { "awsclient:provision": true } }
     const [changedSettings, setChangedSettings] = React.useState<{ [clientName: string]: { [settingKey: string]: boolean } }>({})
-    const [localAttributes, setLocalAttributes] = React.useState({ friendlyName: "", description: "" })
+    const [localAttributes, setLocalAttributes] = React.useState({ friendlyName: "", description: "", teamStartDate: "", teamEndDate: "" })
     const [editDetailsOpen, setEditDetailsOpen] = React.useState(false)
 
     /* Initialize settings when dialog opens or teamInfo/settingDefinitions change */
@@ -1130,7 +1150,9 @@ const TeamSettingsDialog = (props: {
         setChangedSettings(initialSettings);
         setLocalAttributes({
             friendlyName: props.teamInfo.attributes.friendlyName || "",
-            description: props.teamInfo.attributes.description || ""
+            description: props.teamInfo.attributes.description || "",
+            teamStartDate: props.teamInfo.attributes.teamStartDate || "",
+            teamEndDate: props.teamInfo.attributes.teamEndDate || "",
         });
     }, [props.open, props.teamInfo, props.settingDefinitions]);
 
@@ -1162,10 +1184,16 @@ const TeamSettingsDialog = (props: {
                         open={editDetailsOpen}
                         onOpenChange={setEditDetailsOpen}
                         title="Edit Team Details"
-                        description="Update the name and description for your team."
+                        description="Update the name, description, and active date range for your team."
                         initialName={localAttributes.friendlyName}
                         initialDescription={localAttributes.description}
-                        onSave={(n, d) => { props.onTeamInfoChange(n, d); setEditDetailsOpen(false) }}
+                        initialStartDate={localAttributes.teamStartDate}
+                        initialEndDate={localAttributes.teamEndDate}
+                        showDateRange
+                        onSave={(n, d, start, end) => {
+                            props.onTeamInfoChange(n, d, start ?? "", end ?? "");
+                            setEditDetailsOpen(false)
+                        }}
                     />
                     <h1 className="text-2xl">Team Settings</h1>
                     <h3 className="text-muted-foreground">Configure Root Team Attributes</h3>
@@ -1250,20 +1278,38 @@ const EditDetailsDialog = (props: {
     description: string,
     initialName: string,
     initialDescription: string,
-    onSave: (name: string, description: string) => void,
+    initialStartDate?: string,
+    initialEndDate?: string,
+    showDateRange?: boolean,
+    onSave: (name: string, description: string, teamStartDate?: string, teamEndDate?: string) => void,
     isLoading?: boolean,
     submitText?: string
 }) => {
     const [name, setName] = React.useState(props.initialName)
     const [description, setDescription] = React.useState(props.initialDescription)
+    const [teamStartDate, setTeamStartDate] = React.useState(props.initialStartDate ?? "")
+    const [teamEndDate, setTeamEndDate] = React.useState(props.initialEndDate ?? "")
 
     React.useEffect(() => {
+        if (!props.open) return;
         setName(props.initialName)
         setDescription(props.initialDescription)
-    }, [props.open, props.initialName, props.initialDescription])
+        setTeamStartDate(props.initialStartDate ?? "")
+        setTeamEndDate(props.initialEndDate ?? "")
+    }, [props.open, props.initialName, props.initialDescription, props.initialStartDate, props.initialEndDate])
 
     const handleSave = () => {
-        props.onSave(name, description)
+        if (props.showDateRange && (!teamStartDate || !teamEndDate)) {
+            toast.error("Team start and end dates are required")
+            return;
+        }
+
+        if (props.showDateRange && new Date(teamStartDate) > new Date(teamEndDate)) {
+            toast.error("Team start date must be on or before team end date")
+            return;
+        }
+
+        props.onSave(name, description, teamStartDate, teamEndDate)
         // props.onOpenChange(false) - Controlled by parent
     }
 
@@ -1295,10 +1341,31 @@ const EditDetailsDialog = (props: {
                             placeholder="Description"
                         />
                     </div>
+                    {props.showDateRange && (
+                        <>
+                            <div className="grid gap-2">
+                                <Label htmlFor="edit-details-team-start-date">Team Start Date</Label>
+                                <DatePicker
+                                    id="edit-details-team-start-date"
+                                    value={teamStartDate}
+                                    onChange={setTeamStartDate}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <Label htmlFor="edit-details-team-end-date">Team End Date</Label>
+                                <DatePicker
+                                    id="edit-details-team-end-date"
+                                    value={teamEndDate}
+                                    onChange={setTeamEndDate}
+                                    disabledBefore={teamStartDate || undefined}
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => props.onOpenChange(false)}>Cancel</Button>
-                    <Button disabled={props.isLoading} onClick={handleSave}>
+                    <Button disabled={props.isLoading || (props.showDateRange && (!teamStartDate || !teamEndDate || new Date(teamStartDate) > new Date(teamEndDate)))} onClick={handleSave}>
                         <Loader2Icon className={cn("animate-spin", !props.isLoading ? "hidden" : "")} />
                         {props.submitText ?? "Update Info"}
                     </Button>

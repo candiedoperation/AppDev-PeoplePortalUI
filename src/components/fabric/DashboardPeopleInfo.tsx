@@ -106,6 +106,8 @@ interface TeamInformationBrief {
     description: string;
     friendlyName: string;
     peoplePortalCreation: boolean;
+    parentName?: string;
+    parentFriendlyName?: string;
 }
 
 interface ReviewData { 
@@ -182,14 +184,14 @@ export const DashboardPeopleInfo = () => {
                 setUser(userData);
 
                 // 2. Fetch user's root teams using their username
-                const teamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userData.username}/memberof`, {
+                const teamsRes = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userData.username}/memberships`, {
                     credentials: 'include'
                 });
                 if (teamsRes.ok) {
                     const teamsData = await teamsRes.json();
                     // Build map: teamPk -> TeamInfo
                     const teamsMap = new Map<string, TeamInformationBrief>();
-                    for (const team of teamsData.teams || []) {
+                    for (const team of teamsData.memberships || []) {
                         teamsMap.set(team.pk, team);
                     }
                     setUserTeamsMap(teamsMap);
@@ -404,6 +406,16 @@ export const DashboardPeopleInfo = () => {
         }))
         .filter(entry => entry.teamInfo !== undefined);
 
+    const copyToClipboard = async (text: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            toast.info("Email copied to clipboard");
+        }
+        catch (err) {
+            toast.error("Failed to copy email");
+        }
+    };
+
     return (
         <>
             <ReviewUserDialog
@@ -478,9 +490,9 @@ export const DashboardPeopleInfo = () => {
                         <div className="flex flex-col gap-2 text-sm text-muted-foreground border-t pt-4">
                             <div className="flex items-center gap-2">
                                 <Mail className="h-4 w-4 shrink-0" />
-                                <a href={`mailto:${user.email}`} className="hover:text-primary hover:underline truncate transition-colors" title={user.email}>
+                                <button onClick={() => { copyToClipboard(user.email) }} className="hover:text-primary hover:underline cursor-pointer truncate transition-colors" title={user.email}>
                                     {user.email}
-                                </a>
+                                </button>
                             </div>
 
                             {attributes?.phoneNumber && (
@@ -545,9 +557,20 @@ export const DashboardPeopleInfo = () => {
                                         <CardContent className="p-3">
                                             <div className="flex flex-col gap-1.5">
                                                 <div className="flex items-center justify-between gap-2">
-                                                    <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
-                                                        {teamInfo?.friendlyName || "Unknown Team"}
-                                                    </CardTitle>
+                                                    {teamInfo?.parentFriendlyName || teamInfo?.parentName ? (
+                                                        <div className="flex flex-col gap-0.5 min-w-0">
+                                                            <span className="text-sm font-bold text-foreground truncate" title={teamInfo.parentFriendlyName || teamInfo.parentName}>
+                                                                {teamInfo.parentFriendlyName || teamInfo.parentName}
+                                                            </span>
+                                                            <CardTitle className="text-[10px] text-muted-foreground uppercase tracking-wider truncate" title={teamInfo.friendlyName || teamPk}>
+                                                                {teamInfo.friendlyName}
+                                                            </CardTitle>
+                                                        </div>
+                                                    ) : (
+                                                        <CardTitle className="text-sm font-bold text-foreground truncate" title={teamInfo?.friendlyName || teamPk}>
+                                                            {teamInfo?.friendlyName || "Unknown Team"}
+                                                        </CardTitle>
+                                                    )}
                                                     {teamInfo?.teamType && (
                                                         <Badge variant="secondary" className="text-[9px] h-4 px-1 rounded font-normal text-muted-foreground shrink-0">
                                                             {teamInfo.teamType}

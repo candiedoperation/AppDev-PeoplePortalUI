@@ -26,6 +26,11 @@ import { DashboardTeamsList } from "@/components/fabric/DashboardTeamsList"
 import { OrgChartVisualization } from "@/components/fragments/OrgChartVisualization"
 import { OrgTeamRequestReview } from "@/components/fragments/OrgTeamRequestReview"
 import { PlatformLicenseInfo } from "@/components/fragments/PlatformLicenseInfo"
+import { Events } from "./Events"
+import { EventAttendance } from "./EventAttendance"
+import { ExecStats } from "./ExecStats"
+import { ArchiveTeams } from "./ArchiveTeams"
+import { Settings } from "./Settings"
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -73,6 +78,18 @@ const translateBreadcrumbPath = (path: string) => {
         case "license":
             return "Licensing"
 
+        case "exec":
+            return "Executive"
+
+        case "stats":
+            return "Stats"
+
+        case "archive-teams":
+            return "Archive Teams"
+
+        case "settings":
+            return "Settings"
+
         default:
             return path
     }
@@ -86,7 +103,8 @@ interface BreadcrumbItem {
 export interface CorpUserInfo {
     name: string,
     avatar: string,
-    email: string
+    email: string,
+    isExecutive: boolean
 }
 
 export const CorpDashboard = () => {
@@ -96,7 +114,8 @@ export const CorpDashboard = () => {
     const [userInfo, setUserInfo] = React.useState<CorpUserInfo>({
         name: "Unknown",
         email: "unknown@unknown.local",
-        avatar: ""
+        avatar: "",
+        isExecutive: false
     });
 
     React.useEffect(() => {
@@ -187,6 +206,20 @@ export const CorpDashboard = () => {
                         <Route path="/org/teams/:teamId/recruitment" element={<DashboardTeamRecruitment />} />
                         <Route path="/org/teamrequests/:requestId" element={<OrgTeamRequestReview />} />
                         <Route path="/org/orgchart" element={<OrgChartVisualization />} />
+                        <Route path="/community/events" element={<Events />} />
+                        <Route path="/community/events/:eventId/attendance" element={<EventAttendance />} />
+                        <Route
+                            path="/exec/stats"
+                            element={userInfo.isExecutive ? <ExecStats /> : <Navigate to="/org/people" />}
+                        />
+                        <Route
+                            path="/exec/archive-teams"
+                            element={userInfo.isExecutive ? <ArchiveTeams /> : <Navigate to="/org/people" />}
+                        />
+                        <Route
+                            path="/exec/settings"
+                            element={userInfo.isExecutive ? <Settings /> : <Navigate to="/org/people" />}
+                        />
                         <Route path="/platform/license" element={<PlatformLicenseInfo />} />
                     </Routes>
                 </div>

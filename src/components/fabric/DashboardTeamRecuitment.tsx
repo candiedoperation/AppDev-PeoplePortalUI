@@ -818,10 +818,22 @@ export const DashboardTeamRecruitment = () => {
                                         variant="outline"
                                         size="sm"
                                         className="flex-1"
-                                        onClick={() => selectedApplicationDetails?.email && (window.location.href = `mailto:${selectedApplicationDetails.email}`)}
+                                        onClick={async () => {
+                                            const email = selectedApplicationDetails?.email;
+                                            if (email) {
+                                                try {
+                                                    await navigator.clipboard.writeText(selectedApplicationDetails.email);
+                                                    toast.info("Email copied to clipboard.");
+                                                }
+                                                catch (err) {
+                                                    toast.error("Failed to copy email");
+                                                }
+                                                
+                                            }
+                                        }}
                                         disabled={!selectedApplicationDetails?.email}
                                     >
-                                        Email
+                                        Copy Email
                                         <MailIcon className="ml-1 h-3 w-3" />
                                     </Button>
 

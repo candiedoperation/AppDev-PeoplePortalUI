@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { MemoryRouter } from "react-router"
+import { MemoryRouter } from "react-router-dom"
 import { ArchiveTeams } from "./ArchiveTeams"
 
 /* Fall 2026, so Spring 2026 and anything earlier has expired. */

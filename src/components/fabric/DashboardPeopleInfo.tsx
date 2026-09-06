@@ -16,24 +16,31 @@
   along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, Loader2, Star, PenLine, Trash2Icon, SquarePen, ChevronRight, ChevronDown } from 'lucide-react';
+import { Mail, Phone, Calendar, GraduationCap, Briefcase, ShieldCheck, MapPin, Clock, Tag, AlertCircle, Users, Loader2, Star, PenLine, Trash2Icon, SquarePen, ChevronRight, ChevronDown, PencilIcon, Loader2Icon, Check, ChevronsUpDown, Minus, Plus, UploadCloudIcon, Linkedin } from 'lucide-react';
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from '@/commons/config';
 import { format, formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { Button } from '../ui/button';
-import { Dialog, DialogClose, DialogContent, DialogContentWide, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { Textarea } from '../ui/textarea';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../ui/select';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogClose, DialogContent, DialogContentWide, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { DialogDescription } from '@radix-ui/react-dialog';
+import { PhoneInput } from '@/components/ui/phone-input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Slider } from '@/components/ui/slider';
+import Cropper, { type Area, type Point } from 'react-easy-crop';
+import { LINKEDIN_PROFILE_ERROR, normalizeLinkedInProfileUrl } from '@/lib/linkedin';
+import imageCompression from 'browser-image-compression';
 
 // --- Interfaces matching the Backend ---
 
@@ -68,6 +75,7 @@ interface UserAttributeDefinition {
     major: string;
     expectedGrad: string;
     phoneNumber: string;
+    linkedinUrl?: string;
     roles: { [key: string]: string };
     alumniAccount: boolean;
 }
@@ -122,6 +130,13 @@ interface ReviewData {
   updatedAt: Date;
 }
 
+interface UMDMajor {
+    college: string;
+    major_id: string;
+    name: string;
+    url: string;
+}
+
 // Reusable Info Card Component
 const InfoItem = ({ icon: Icon, label, value, href, className }: { icon: React.ElementType, label: string, value: string | React.ReactNode, href?: string, className?: string }) => (
     <div className={cn("flex flex-col gap-1 p-3 rounded-lg border bg-card text-card-foreground shadow-sm", className)}>
@@ -141,12 +156,91 @@ const InfoItem = ({ icon: Icon, label, value, href, className }: { icon: React.E
     </div>
 );
 
+const SEASONS = ['Spring', 'Summer', 'Fall', 'Winter'];
+const YEARS = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() + i);
+
+const MonthYearPicker = ({ value, onChange }: { value: string, onChange: (v: string) => void }) => {
+    const [selSeason, setSelSeason] = React.useState(() => {
+        if (value) { const idx = SEASONS.indexOf(value.split('-')[0]); return idx >= 0 ? idx : 0; }
+        return 0;
+    });
+    const [selYear, setSelYear] = React.useState(() => {
+        if (value) return parseInt(value.split('-')[1]) || new Date().getFullYear();
+        return new Date().getFullYear();
+    });
+
+    const seasonRefs = useRef<(HTMLDivElement | null)[]>([]);
+    const yearRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+    React.useEffect(() => {
+        seasonRefs.current[selSeason]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, [selSeason]);
+
+    React.useEffect(() => {
+        const idx = YEARS.indexOf(selYear);
+        if (idx >= 0) yearRefs.current[idx]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, [selYear]);
+
+    React.useEffect(() => {
+        onChange(`${SEASONS[selSeason]}-${selYear}`);
+    }, [selSeason, selYear]);
+
+    const colClass = "h-48 overflow-y-auto scrollbar-none flex flex-col items-center w-1/2 snap-y snap-mandatory";
+    const itemClass = (active: boolean) => cn(
+        "w-full text-center py-2 text-sm cursor-pointer snap-center rounded-md transition-all select-none",
+        active ? "font-bold text-foreground bg-muted" : "text-muted-foreground hover:text-foreground"
+    );
+
+    return (
+        <div className="flex gap-2 border rounded-md p-2">
+            <div className={colClass}>
+                {SEASONS.map((s, i) => (
+                    <div key={s} ref={el => { seasonRefs.current[i] = el; }} className={itemClass(i === selSeason)} onClick={() => setSelSeason(i)}>
+                        {s}
+                    </div>
+                ))}
+            </div>
+            <div className="w-px bg-border" />
+            <div className={colClass}>
+                {YEARS.map((y, i) => (
+                    <div key={y} ref={el => { yearRefs.current[i] = el; }} className={itemClass(y === selYear)} onClick={() => setSelYear(y)}>
+                        {y}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 export const DashboardPeopleInfo = () => {
     const { userPk } = useParams<{ userPk: string }>();
     const navigate = useNavigate();
     const [user, setUser] = useState<UserInformationDetail | null>(null);
     const [userTeamsMap, setUserTeamsMap] = useState<Map<string, TeamInformationBrief>>(new Map());
     const [loading, setLoading] = useState(true);
+    const [loggedInPk, setLoggedInPk] = useState<number | null>(null);
+
+    // Edit modal state
+    const [editOpen, setEditOpen] = useState(false);
+    const [editPhone, setEditPhone] = useState('');
+    const [editMajor, setEditMajor] = useState<UMDMajor | undefined>(undefined);
+    const [editGrad, setEditGrad] = useState('');
+    const [editLinkedin, setEditLinkedin] = useState('');
+    const [editLinkedinError, setEditLinkedinError] = useState('');
+    const [editAvatarKey, setEditAvatarKey] = useState<string | undefined>(undefined);
+    const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [majors, setMajors] = useState<UMDMajor[]>([]);
+    const [majorOpen, setMajorOpen] = useState(false);
+
+    // Crop state
+    const [cropImage, setCropImage] = useState<string | null>(null);
+    const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+    const [isCropOpen, setIsCropOpen] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [reviewTeams, setReviewTeams] = useState<TeamInformationBrief[]>([]);
     const [reviews, setReviews] = useState<ReviewData[]>([]);
@@ -373,6 +467,146 @@ export const DashboardPeopleInfo = () => {
         setDeleteReviewDialogOpen(true);
     }, []);
 
+    // Fetch logged-in user's pk
+    useEffect(() => {
+        fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/userinfo`)
+            .then(r => r.json())
+            .then(d => setLoggedInPk(d.pk))
+            .catch(() => {});
+    }, []);
+
+    // Fetch UMD majors when edit modal opens
+    useEffect(() => {
+        if (!editOpen || majors.length > 0) return;
+        fetch('https://api.umd.io/v1/majors/list')
+            .then(r => r.json())
+            .then(setMajors)
+            .catch(() => toast.error('Failed to load majors'));
+    }, [editOpen]);
+
+    const openEdit = () => {
+        if (!user) return;
+        setEditPhone(user.attributes?.phoneNumber ?? '');
+        setEditGrad(user.attributes?.expectedGrad ?? '');
+        setEditLinkedin(user.attributes?.linkedinUrl ?? '');
+        setEditLinkedinError('');
+        setEditAvatarPreview(user.avatar || null);
+        setEditAvatarKey(undefined);
+        if (user.attributes?.major) {
+            setEditMajor(majors.find(m => m.name === user.attributes.major));
+        }
+        setEditOpen(true);
+    };
+
+    const getCroppedImg = (imageSrc: string, pixelCrop: Area): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.src = imageSrc;
+            image.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = pixelCrop.width;
+                canvas.height = pixelCrop.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('No 2d context'));
+                ctx.drawImage(image, pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height, 0, 0, pixelCrop.width, pixelCrop.height);
+                canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Canvas empty')), 'image/webp', 1.0);
+            };
+            image.onerror = reject;
+        });
+    };
+
+    const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+        if (!allowed.includes(file.type)) return toast.error('Invalid file type');
+        if (file.size > 20 * 1024 * 1024) return toast.error('File too large (max 20MB)');
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+        const reader = new FileReader();
+        reader.onload = () => { setCropImage(reader.result as string); setIsCropOpen(true); };
+        reader.readAsDataURL(file);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const processAndUpload = async () => {
+        if (!cropImage || !croppedAreaPixels || !userPk) return;
+        toast.info('Processing image...');
+        setIsUploading(true);
+        setIsCropOpen(false);
+        try {
+            const croppedBlob = await getCroppedImg(cropImage, croppedAreaPixels);
+            const compressed = await imageCompression(new File([croppedBlob], 'avatar.webp', { type: 'image/webp' }), {
+                maxSizeMB: 0.45, maxWidthOrHeight: 512, useWebWorker: true, fileType: 'image/webp'
+            });
+            const uploadFile = new File([compressed], 'avatar.webp', { type: 'image/webp' });
+            setEditAvatarPreview(URL.createObjectURL(uploadFile));
+
+            const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/avatar/profile-upload-url?fileName=${encodeURIComponent(uploadFile.name)}&contentType=${encodeURIComponent(uploadFile.type)}`, { credentials: 'include' });
+            if (!res.ok) throw new Error((await res.json()).message || 'Failed to get upload URL');
+            const { uploadUrl, key, fields } = await res.json();
+
+            const formData = new FormData();
+            Object.entries(fields).forEach(([k, v]) => formData.append(k, v as string));
+            formData.append('file', uploadFile);
+            const uploadRes = await fetch(uploadUrl, { method: 'POST', body: formData });
+            if (!uploadRes.ok) throw new Error('Upload failed');
+
+            setEditAvatarKey(key);
+            toast.success('Profile picture uploaded!');
+        } catch (e: any) {
+            toast.error('Upload failed', { description: e.message });
+        } finally {
+            setIsUploading(false);
+            setCropImage(null);
+        }
+    };
+
+    const handleSave = async () => {
+        if (!userPk) return;
+
+        const normalizedLinkedinUrl = normalizeLinkedInProfileUrl(editLinkedin);
+        if (normalizedLinkedinUrl === null) {
+            setEditLinkedinError(LINKEDIN_PROFILE_ERROR);
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const body: Record<string, string> = {};
+            if (editPhone !== (user?.attributes?.phoneNumber ?? '')) body.phoneNumber = editPhone;
+            if (editGrad !== (user?.attributes?.expectedGrad ?? '')) body.expectedGrad = editGrad;
+            if (editMajor && editMajor.name !== user?.attributes?.major) body.major = editMajor.name;
+            if (normalizedLinkedinUrl !== (user?.attributes?.linkedinUrl ?? '')) body.linkedinUrl = normalizedLinkedinUrl;
+            if (editAvatarKey) body.avatarKey = editAvatarKey;
+
+            if (Object.keys(body).length === 0) { setEditOpen(false); return; }
+
+            const res = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.message || 'Failed to save');
+            }
+
+            toast.success('Profile updated!');
+            setEditOpen(false);
+
+            // Refresh profile data
+            const updated = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/org/people/${userPk}`);
+            if (updated.ok) setUser(await updated.json());
+        } catch (e: any) {
+            toast.error('Failed to save', { description: e.message });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex flex-col md:flex-row gap-8 p-6">
@@ -395,6 +629,7 @@ export const DashboardPeopleInfo = () => {
 
     const { attributes } = user;
     const initials = user.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    const linkedinHref = normalizeLinkedInProfileUrl(attributes?.linkedinUrl ?? '');
 
     // Build role entries from attributes.roles, looking up team info from map
     // Filter out entries where team info couldn't be found
@@ -463,7 +698,14 @@ export const DashboardPeopleInfo = () => {
                             </Avatar>
 
                             <div className="space-y-0.5 mt-2 w-full">
-                                <h1 className="text-2xl font-bold tracking-tight text-foreground break-words leading-tight">{user.name}</h1>
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-2xl font-bold tracking-tight text-foreground break-words leading-tight">{user.name}</h1>
+                                    {loggedInPk !== null && Number(userPk) === loggedInPk && (
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={openEdit}>
+                                            <PencilIcon className="h-4 w-4" />
+                                        </Button>
+                                    )}
+                                </div>
                                 <p className="text-base text-muted-foreground font-mono break-all">{user.username}</p>
                             </div>
 
@@ -500,6 +742,21 @@ export const DashboardPeopleInfo = () => {
                                     <Phone className="h-4 w-4 shrink-0" />
                                     <a href={`tel:${attributes.phoneNumber}`} className="hover:text-primary hover:underline truncate transition-colors" title={attributes.phoneNumber}>
                                         {attributes.phoneNumber}
+                                    </a>
+                                </div>
+                            )}
+
+                            {linkedinHref && (
+                                <div className="flex items-center gap-2">
+                                    <Linkedin className="h-4 w-4 shrink-0" />
+                                    <a
+                                        href={linkedinHref}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="hover:text-primary hover:underline truncate transition-colors"
+                                        title={linkedinHref}
+                                    >
+                                        LinkedIn
                                     </a>
                                 </div>
                             )}
@@ -707,6 +964,141 @@ export const DashboardPeopleInfo = () => {
                     }
                 </div>
             </div>
+
+            {/* Edit Profile Dialog */}
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Edit Profile</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="flex flex-col gap-5 py-2">
+                        {/* Avatar */}
+                        <div className="flex flex-col items-center gap-2">
+                            <Avatar
+                                className="h-24 w-24 cursor-pointer ring-2 ring-muted hover:ring-primary transition-all"
+                                onClick={() => fileInputRef.current?.click()}
+                            >
+                                <AvatarImage src={editAvatarPreview ?? undefined} className="object-cover" />
+                                <AvatarFallback>
+                                    {isUploading ? <Loader2Icon className="h-6 w-6 animate-spin" /> : <UploadCloudIcon className="h-6 w-6" />}
+                                </AvatarFallback>
+                            </Avatar>
+                            <p className="text-xs text-muted-foreground">Click to change photo</p>
+                            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
+                        </div>
+
+                        {/* Major */}
+                        <div className="grid gap-1.5">
+                            <Label>Major</Label>
+                            <Popover modal open={majorOpen} onOpenChange={setMajorOpen}>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" role="combobox" className="justify-between">
+                                        {editMajor ? editMajor.name : 'Select major'}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[400px] p-0 max-h-[32rem] overflow-hidden">
+                                    <Command>
+                                        <CommandInput placeholder="Search UMD major..." />
+                                        <CommandList className="flex-1 min-h-0 max-h-[24rem] overflow-y-auto">
+                                            <CommandEmpty>No majors found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {majors.map(m => (
+                                                    <CommandItem key={m.major_id} value={m.name} onSelect={() => { setEditMajor(m); setMajorOpen(false); }}>
+                                                        <div className="flex flex-col">
+                                                            <span>{m.name}</span>
+                                                            <span className="text-xs text-muted-foreground">{m.college}</span>
+                                                        </div>
+                                                        <Check className={cn('ml-auto h-4 w-4', editMajor?.major_id === m.major_id ? 'opacity-100' : 'opacity-0')} />
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+
+                        {/* Expected Graduation */}
+                        <div className="grid gap-1.5">
+                            <Label>Expected Graduation</Label>
+                            <MonthYearPicker value={editGrad} onChange={setEditGrad} />
+                        </div>
+
+                        {/* Phone */}
+                        <div className="grid gap-1.5">
+                            <Label>Phone Number</Label>
+                            <PhoneInput defaultCountry="US" value={editPhone} onChange={setEditPhone} placeholder="Enter phone number" />
+                        </div>
+
+                        {/* LinkedIn */}
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="profile-linkedin">
+                                LinkedIn Profile <span className="text-muted-foreground font-normal">(Optional)</span>
+                            </Label>
+                            <Input
+                                id="profile-linkedin"
+                                type="url"
+                                inputMode="url"
+                                autoComplete="url"
+                                maxLength={300}
+                                placeholder="https://www.linkedin.com/in/your-name"
+                                value={editLinkedin}
+                                aria-invalid={Boolean(editLinkedinError)}
+                                onChange={(e) => {
+                                    setEditLinkedin(e.target.value);
+                                    if (editLinkedinError) setEditLinkedinError('');
+                                }}
+                                onBlur={() => {
+                                    const normalized = normalizeLinkedInProfileUrl(editLinkedin);
+                                    if (normalized === null) {
+                                        setEditLinkedinError(LINKEDIN_PROFILE_ERROR);
+                                    } else {
+                                        setEditLinkedin(normalized);
+                                        setEditLinkedinError('');
+                                    }
+                                }}
+                            />
+                            {editLinkedinError && <p className="text-sm text-destructive">{editLinkedinError}</p>}
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+                        <Button onClick={handleSave} disabled={isSaving || isUploading}>
+                            {isSaving && <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />}
+                            Save Changes
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Crop Dialog */}
+            <Dialog open={isCropOpen} onOpenChange={open => { setIsCropOpen(open); if (!open) setCropImage(null); }}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>Crop Profile Picture</DialogTitle>
+                    </DialogHeader>
+                    <div className="relative h-[350px] w-full bg-muted rounded-md overflow-hidden mt-2">
+                        {cropImage && (
+                            <Cropper image={cropImage} crop={crop} zoom={zoom} aspect={1}
+                                onCropChange={setCrop} onZoomChange={setZoom}
+                                onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+                            />
+                        )}
+                    </div>
+                    <div className="flex items-center gap-4 mt-3">
+                        <Minus className="h-4 w-4 cursor-pointer" onClick={() => setZoom(z => Math.max(1, z - 0.1))} />
+                        <Slider value={[zoom]} min={1} max={3} step={0.1} onValueChange={v => setZoom(v[0])} className="flex-1" />
+                        <Plus className="h-4 w-4 cursor-pointer" onClick={() => setZoom(z => Math.min(3, z + 0.1))} />
+                    </div>
+                    <DialogFooter className="mt-2">
+                        <Button variant="outline" onClick={() => setIsCropOpen(false)}>Cancel</Button>
+                        <Button onClick={processAndUpload}>Crop & Upload</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 };

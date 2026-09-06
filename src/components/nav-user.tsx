@@ -42,7 +42,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useNavigate } from "react-router"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 
@@ -54,6 +54,7 @@ export function NavUser({
     name: string
     email: string
     avatar: string
+    pk: number
   }
 }) {
   const { isMobile } = useSidebar()

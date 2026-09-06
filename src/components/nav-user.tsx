@@ -18,7 +18,6 @@
 
 import {
   BadgeCheck,
-  Bell,
   ChevronsUpDown,
   LogOut,
 } from "lucide-react"
@@ -43,17 +42,42 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
+import { useNavigate } from "react-router"
+import { toast } from "sonner"
+import { PEOPLEPORTAL_SERVER_ENDPOINT } from "@/commons/config"
 
 export function NavUser({
   user,
 }: {
   user: {
+    pk: number
     name: string
     email: string
     avatar: string
   }
 }) {
   const { isMobile } = useSidebar()
+  const navigate = useNavigate()
+
+  /* The applicant portal has logged out correctly since February; this menu
+     shipped as unwired shadcn scaffolding, so the corp dashboard had no way
+     out at all short of clearing cookies. Same call as ATSDashboard. */
+  const handleLogout = async () => {
+    try {
+      const response = await fetch(`${PEOPLEPORTAL_SERVER_ENDPOINT}/api/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+      })
+      if (!response.ok) throw new Error(response.statusText)
+
+      toast.success("Logged out successfully")
+      /* A full reload, not a client-side route change: the session is gone, so
+         every cached page and fetch in memory is now stale. */
+      window.location.href = "/"
+    } catch {
+      toast.error("Failed to log out. Please try again.")
+    }
+  }
 
   const getFallbackAvatar = () => {
     const nameArray = user.name.split(" ");
@@ -104,17 +128,16 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              {/* Notifications was removed rather than left inert: there is no
+                  route behind it, and a menu item that does nothing when
+                  clicked is worse than one that is not offered. */}
+              <DropdownMenuItem onClick={() => navigate(`/org/people/${user.pk}`)}>
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Bell />
-                Notifications
-              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
               Log out
             </DropdownMenuItem>

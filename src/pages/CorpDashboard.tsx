@@ -99,6 +99,9 @@ interface BreadcrumbItem {
 }
 
 export interface CorpUserInfo {
+    /* Authentik primary key. Needed so the sidebar can link to this person's
+       own profile page at /org/people/:userPk. */
+    pk: number,
     name: string,
     avatar: string,
     email: string,
@@ -110,6 +113,7 @@ export const CorpDashboard = () => {
     const navigate = useNavigate()
     const [breadcrumbs, setBreadcrumbs] = React.useState<BreadcrumbItem[]>([]);
     const [userInfo, setUserInfo] = React.useState<CorpUserInfo>({
+        pk: 0,
         name: "Unknown",
         email: "unknown@unknown.local",
         avatar: "",

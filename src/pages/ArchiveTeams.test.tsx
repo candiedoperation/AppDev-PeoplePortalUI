@@ -87,3 +87,25 @@ describe("ArchiveTeams", () => {
     expect(url).toContain("includeArchived=true")
   })
 })
+
+describe("ArchiveTeams superuser notice", () => {
+  it("states up front that archiving needs superuser access", async () => {
+    renderPage()
+    await waitFor(() =>
+      expect(screen.getByText(/Archiving a team requires/i)).toBeInTheDocument()
+    )
+    expect(screen.getByText(/superuser/i)).toBeInTheDocument()
+  })
+
+  it("repeats the requirement in the confirmation dialog", async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await waitFor(() => expect(screen.getByText("Web Dev")).toBeInTheDocument())
+
+    await user.click(screen.getAllByRole("button", { name: /archive/i })[0])
+
+    await waitFor(() =>
+      expect(screen.getByText(/Requires superuser access/i)).toBeInTheDocument()
+    )
+  })
+})

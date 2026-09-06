@@ -43,7 +43,7 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { ArchiveIcon, Loader2, SearchIcon, UsersRound } from "lucide-react"
+import { ArchiveIcon, Loader2, SearchIcon, ShieldAlertIcon, UsersRound } from "lucide-react"
 import { partitionByLifecycle } from "@/lib/season"
 
 /* ─────────────────────────────────────────────
@@ -199,6 +199,9 @@ const TeamsTable = ({ loading, teams, search, onSearchChange, emptyLabel, onArch
                                                             This makes the team's shared resources (Gitea repositories,
                                                             Slack channels) read-only while preserving all data. The team
                                                             will move to the Archived tab. This can be undone later.
+                                                            <br /><br />
+                                                            <strong>Requires superuser access.</strong> If you are an
+                                                            executive without it, this will be refused.
                                                         </AlertDialogDescription>
                                                     </AlertDialogHeader>
                                                     <AlertDialogFooter>
@@ -312,6 +315,17 @@ export const ArchiveTeams = () => {
             <div className="flex flex-col gap-3">
                 <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight text-balance">Archive Teams</h1>
                 <h4 className="text-xl text-muted-foreground">Browse active, expired and archived teams</h4>
+
+                {/* The API gates archiving on the su:exclusive scope, so an
+                    Executive Board member who is not a superuser gets a 403.
+                    Said up front rather than after the click. */}
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-600">
+                    <ShieldAlertIcon className="mt-0.5 size-4 shrink-0" />
+                    <span>
+                        Archiving a team requires <strong>superuser</strong> access. Executive Board
+                        membership alone is not enough, and the request will be refused.
+                    </span>
+                </div>
             </div>
 
             <Tabs defaultValue="active" className="flex flex-1 flex-col gap-4">
